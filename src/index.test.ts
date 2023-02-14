@@ -1,18 +1,12 @@
 import { expect, test } from "@jest/globals";
 import { transform } from "@codemod/core";
-import foo from "./index.js";
-
-type _T = 42;
-
-test("example", () => {
-  expect(foo).toBe(42);
-});
+import plugin from "./index.js";
 
 test("recast transform", () => {
   const result = transform("a ?? b", {
     configFile: false,
     babelrc: false,
-    plugins: [],
+    plugins: [plugin],
   })
 
   expect(result.code).toBe("a ?? b");
