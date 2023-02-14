@@ -12,8 +12,8 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj {
         }
         path.replaceWith(t.variableDeclaration("const", [
           t.variableDeclarator(
-            t.identifier("foo"),
-            t.nullLiteral(),
+            t.cloneNode(path.node.id),
+            t.arrowFunctionExpression([], t.blockStatement([])),
           )
         ]));
       },

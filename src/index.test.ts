@@ -13,7 +13,7 @@ function transform(code: string) {
 
 describe("react-unclass", () => {
   it("transforms Component class", () => {
-    expect(transform("class C extends Component {}")).toBe("const foo = null;");
+    expect(transform("class C extends Component {}")).toBe("const C = () => {};");
   });
 
   it("ignores plain classes", () => {
