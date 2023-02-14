@@ -1,5 +1,7 @@
 import type { NodePath, PluginObj } from "@babel/core";
-import type { ClassDeclaration, TSType } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, TSType } from "@babel/types";
+import { memberName } from "./utils.js";
+
 export default function plugin(babel: typeof import("@babel/core")): PluginObj {
   const { types: t } = babel;
   return {
@@ -10,10 +12,15 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj {
         if (!head) {
           return;
         }
+        const body = analyzeBody(path);
         path.replaceWith(t.variableDeclaration("const", [
           t.variableDeclarator(
             t.cloneNode(path.node.id),
-            t.arrowFunctionExpression([], t.blockStatement([])),
+            t.arrowFunctionExpression([],
+              body.render
+                ? body.render.node.body
+                : t.blockStatement([])
+            ),
           )
         ]));
       },
@@ -31,4 +38,21 @@ function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | undefine
   if (superClass.isIdentifier() && superClass.node.name === "Component") {
     return { props: undefined };
   }
+}
+
+type ComponentBody = {
+  render?: NodePath<ClassMethod>;
+};
+
+function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
+  const data: ComponentBody = {};
+  for (const itemPath of path.get("body").get("body")) {
+    if (itemPath.isClassMethod()) {
+      const name = memberName(itemPath.node);
+      if (name === "render") {
+        data.render = itemPath;
+      }
+    }
+  }
+  return data;
 }

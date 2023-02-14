@@ -6,13 +6,26 @@ function transform(code: string) {
   const result = transformCore(code, {
     configFile: false,
     babelrc: false,
+    parserOpts: {
+      plugins: ["jsx", "typescript"],
+    },
     plugins: [plugin],
   });
   return result.code;
 }
 
 describe("react-declassify", () => {
-  it("transforms Component class", () => {
+  it("transforms simple Component class", () => {
+    expect(transform(`class C extends Component {
+  render() {
+    return <div>Hello, world!</div>;
+  }
+}`)).toBe(`const C = () => {
+  return <div>Hello, world!</div>;
+};`);
+  });
+
+  it("transforms empty Component class", () => {
     expect(transform("class C extends Component {}")).toBe("const C = () => {};");
   });
 
