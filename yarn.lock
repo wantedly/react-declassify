@@ -3794,6 +3794,7 @@ __metadata:
   dependencies:
     "@babel/core": ^7.20.12
     "@babel/preset-typescript": ^7.18.6
+    "@babel/types": ^7.20.7
     "@codemod/core": ^2.0.1
     "@jest/globals": ^29.4.2
     "@types/babel__core": ^7.20.0
