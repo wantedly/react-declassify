@@ -3,7 +3,7 @@ import type { ClassDeclaration, TSType } from "@babel/types";
 export default function plugin(babel: typeof import("@babel/core")): PluginObj {
   const { types: t } = babel;
   return {
-    name: "react-unclass",
+    name: "react-declassify",
     visitor: {
       ClassDeclaration(path) {
         const head = analyzeHead(path);

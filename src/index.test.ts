@@ -11,7 +11,7 @@ function transform(code: string) {
   return result.code;
 }
 
-describe("react-unclass", () => {
+describe("react-declassify", () => {
   it("transforms Component class", () => {
     expect(transform("class C extends Component {}")).toBe("const C = () => {};");
   });

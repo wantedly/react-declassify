@@ -1,1 +1,1 @@
-# react-unclass: say goodbye to class components
+# react-declassify: say goodbye to class components
