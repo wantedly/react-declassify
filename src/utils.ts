@@ -1,5 +1,5 @@
 import type { PluginPass } from "@babel/core";
-import type { ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, ObjectMethod, ObjectProperty, StringLiteral, TSDeclareMethod } from "@babel/types";
+import type { ArrayPattern, AssignmentPattern, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, ObjectMethod, ObjectPattern, ObjectProperty, RestElement, StringLiteral, TSDeclareMethod, TSTypeAnnotation } from "@babel/types";
 
 export function memberName(member: ClassMethod | ClassPrivateMethod | ClassProperty | ClassPrivateProperty | ClassAccessorProperty | TSDeclareMethod | ObjectMethod | ObjectProperty): string | undefined {
   const computed = member.type === "ClassPrivateMethod" || member.type === "ClassPrivateProperty"
@@ -33,4 +33,16 @@ export function isTS(state: PluginPass): boolean {
     return /\.(?:[mc]ts|tsx?)$/i.test(state.filename);
   }
   return false;
+}
+
+type Annotatable =
+  Identifier | AssignmentPattern | ArrayPattern | ObjectPattern | RestElement | ClassProperty | ClassAccessorProperty | ClassPrivateProperty;
+
+export function assignTypeAnnotation<T extends Annotatable>(
+  node: T,
+  typeAnnotation: TSTypeAnnotation | null | undefined,
+): T {
+  return Object.assign(node, {
+    typeAnnotation,
+  });
 }

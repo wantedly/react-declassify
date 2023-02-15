@@ -1,6 +1,6 @@
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, TSType } from "@babel/types";
-import { importName, isTS, memberName, memberRefName } from "./utils.js";
+import { assignTypeAnnotation, importName, isTS, memberName, memberRefName } from "./utils.js";
 
 type Options = {};
 
@@ -19,8 +19,9 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         path.replaceWith(t.variableDeclaration("const", [
           t.variableDeclarator(
             ts
-            ? Object.assign<Identifier, Partial<Identifier>>(t.cloneNode(path.node.id), {
-              typeAnnotation: t.tsTypeAnnotation(
+            ? assignTypeAnnotation(
+              t.cloneNode(path.node.id),
+              t.tsTypeAnnotation(
                 t.tsTypeReference(
                   t.tsQualifiedName(
                     t.identifier("React"),
@@ -28,7 +29,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                   ),
                 ),
               ),
-            })
+            )
             : t.cloneNode(path.node.id),
             t.arrowFunctionExpression([],
               body.render
