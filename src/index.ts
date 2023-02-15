@@ -1,5 +1,5 @@
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { ClassDeclaration, ClassMethod, Identifier, TSType } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Identifier, TSType } from "@babel/types";
 import { isTS, memberName } from "./utils.js";
 
 type Options = {};
