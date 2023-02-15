@@ -9,10 +9,11 @@ function transform(code: string, options: {
   const result = transformCore(code, {
     configFile: false,
     babelrc: false,
+    filename: ts ? "file.tsx" : "file.jsx",
     parserOpts: {
       plugins: ["jsx", "typescript"],
     },
-    plugins: [[plugin, { typescript: ts }]],
+    plugins: [plugin],
   });
   return result.code;
 }

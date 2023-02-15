@@ -1,10 +1,8 @@
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { ClassDeclaration, ClassMethod, Identifier, TSType } from "@babel/types";
-import { memberName } from "./utils.js";
+import { isTS, memberName } from "./utils.js";
 
-type Options = {
-  typescript?: boolean | undefined;
-};
+type Options = {};
 
 export default function plugin(babel: typeof import("@babel/core")): PluginObj<PluginPass & { opts: Options }> {
   const { types: t } = babel;
@@ -12,6 +10,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
     name: "react-declassify",
     visitor: {
       ClassDeclaration(path, state) {
+        const ts = isTS(state);
         const head = analyzeHead(path);
         if (!head) {
           return;
@@ -19,7 +18,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         const body = analyzeBody(path);
         path.replaceWith(t.variableDeclaration("const", [
           t.variableDeclarator(
-            state.opts.typescript
+            ts
             ? Object.assign<Identifier, Partial<Identifier>>(t.cloneNode(path.node.id), {
               typeAnnotation: t.tsTypeAnnotation(
                 t.tsTypeReference(
