@@ -20,7 +20,7 @@ function transform(code: string, options: {
 
 describe("react-declassify", () => {
   it("transforms simple Component class", () => {
-    expect(transform(`class C extends Component {
+    expect(transform(`class C extends React.Component {
   render() {
     return <div>Hello, world!</div>;
   }
@@ -30,7 +30,7 @@ describe("react-declassify", () => {
   });
 
   it("generates React.FC", () => {
-    expect(transform(`class C extends Component {
+    expect(transform(`class C extends React.Component {
   render() {
     return <div>Hello, world!</div>;
   }
@@ -40,7 +40,7 @@ describe("react-declassify", () => {
   });
 
   it("transforms empty Component class", () => {
-    expect(transform("class C extends Component {}")).toBe("const C = () => {};");
+    expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
   });
 
   it("ignores plain classes", () => {
