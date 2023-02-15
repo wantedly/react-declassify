@@ -43,7 +43,87 @@ describe("react-declassify", () => {
     expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
   });
 
-  it("ignores plain classes", () => {
-    expect(transform("class C {}")).toBe("class C {}");
+  describe("Component detection", () => {
+    it("transforms Component subclass (named import case)", () => {
+      expect(transform(`import { Component } from "react";
+class C extends Component {}`)).toBe(`import { Component } from "react";
+const C = () => {};`);
+    });
+
+    it("transforms PureComponent subclass", () => {
+      expect(transform(`import React from "react";
+class C extends React.PureComponent {}`)).toBe(`import React from "react";
+const C = () => {};`);
+    });
+
+    it("transforms Component subclass (renamed import case)", () => {
+      expect(transform(`import { Component as CBase } from "react";
+class C extends CBase {}`)).toBe(`import { Component as CBase } from "react";
+const C = () => {};`);
+    });
+
+    it("transforms React.Component subclass (global case)", () => {
+      expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
+    });
+
+    it("transforms React.Component subclass (default import case)", () => {
+      expect(transform(`import React from "react";
+class C extends React.Component {}`)).toBe(`import React from "react";
+const C = () => {};`);
+    });
+
+    it("transforms React.Component subclass (namespace import case)", () => {
+      expect(transform(`import * as React from "react";
+class C extends React.Component {}`)).toBe(`import * as React from "react";
+const C = () => {};`);
+    });
+
+    it("transforms React.Component subclass (renamed default import case)", () => {
+      expect(transform(`import MyReact from "react";
+class C extends MyReact.Component {}`)).toBe(`import MyReact from "react";
+const C = () => {};`);
+    });
+
+    it("ignores plain classes", () => {
+      expect(transform("class C {}")).toBe("class C {}");
+    });
+
+    it("ignores complex inheritance", () => {
+      expect(transform("class C extends mixin() {}")).toBe("class C extends mixin() {}");
+    });
+
+    it("ignores non-Component subclass (named import case)", () => {
+      expect(transform(`import { Componen } from "react";
+class C extends Componen {}`)).toBe(`import { Componen } from "react";
+class C extends Componen {}`);
+    });
+
+    it("ignores non-Component subclass (renamed import case)", () => {
+      expect(transform(`import { Componen as Component } from "react";
+class C extends Component {}`)).toBe(`import { Componen as Component } from "react";
+class C extends Component {}`);
+    });
+
+    it("ignores non-Component subclass (global case)", () => {
+      expect(transform("class C extends React.Componen {}")).toBe("class C extends React.Componen {}");
+    });
+
+    it("ignores non-Component subclass (default import case)", () => {
+      expect(transform(`import React from "react";
+class C extends React.Componen {}`)).toBe(`import React from "react";
+class C extends React.Componen {}`);
+    });
+
+    it("ignores non-Component subclass (namespace import case)", () => {
+      expect(transform(`import * as React from "react";
+class C extends React.Componen {}`)).toBe(`import * as React from "react";
+class C extends React.Componen {}`);
+    });
+
+    it("ignores non-React subclass (non-react import case)", () => {
+      expect(transform(`import React from "reeeeact";
+class C extends React.Component {}`)).toBe(`import React from "reeeeact";
+class C extends React.Component {}`);
+    });
   });
 });
