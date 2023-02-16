@@ -11,6 +11,7 @@
     "@babel/types": "^7.20.7",
     "@codemod/core": "^2.0.1",
     "@jest/globals": "^29.4.2",
+    "@qnighy/dedent": "qnighy/dedent-js#workspace=@qnighy/dedent&commit=fbcc79820cb8f1894caf154ee375afb132d740ee",
     "@types/babel__core": "^7.20.0",
     "@yarnpkg/sdks": "^3.0.0-rc.39",
     "babel-jest": "^29.4.2",

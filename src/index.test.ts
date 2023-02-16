@@ -1,5 +1,6 @@
 import { describe, it, expect } from "@jest/globals";
 import { transform as transformCore } from "@codemod/core";
+import { dedent } from "@qnighy/dedent";
 import plugin from "./index.js";
 
 function transform(code: string, options: {
@@ -20,119 +21,204 @@ function transform(code: string, options: {
 
 describe("react-declassify", () => {
   it("transforms simple Component class", () => {
-    expect(transform(`class C extends React.Component {
-  render() {
-    return <div>Hello, world!</div>;
-  }
-}`)).toBe(`const C = () => {
-  return <div>Hello, world!</div>;
-};`);
+    const input = dedent`
+      class C extends React.Component {
+        render() {
+          return <div>Hello, world!</div>;
+        }
+      }
+    `;
+    const output = dedent`
+      const C = () => {
+        return <div>Hello, world!</div>;
+      };
+    `;
+    expect(transform(input)).toBe(output);
   });
 
   it("generates React.FC", () => {
-    expect(transform(`class C extends React.Component {
-  render() {
-    return <div>Hello, world!</div>;
-  }
-}`, { ts: true })).toBe(`const C: React.FC = () => {
-  return <div>Hello, world!</div>;
-};`);
+    const input = dedent`
+      class C extends React.Component {
+        render() {
+          return <div>Hello, world!</div>;
+        }
+      }
+    `;
+    const output = dedent`
+      const C: React.FC = () => {
+        return <div>Hello, world!</div>;
+      };
+    `;
+    expect(transform(input, { ts: true })).toBe(output);
   });
 
   it("transforms empty Component class", () => {
-    expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
+    const input = dedent`
+      class C extends React.Component {}
+    `;
+    const output = dedent`
+      const C = () => {};
+    `;
+    expect(transform(input)).toBe(output);
   });
 
   it("adds error message when analysis failed", () => {
-    expect(transform(`class C extends React.Component {
-  rende() {}
-}`)).toBe(`/* react-declassify:disabled Cannot perform transformation: Unrecognized class element: rende */
-class C extends React.Component {
-  rende() {}
-}`);
+    const input = dedent`
+      class C extends React.Component {
+        rende() {}
+      }
+    `;
+    const output = dedent`
+      /* react-declassify:disabled Cannot perform transformation: Unrecognized class element: rende */
+      class C extends React.Component {
+        rende() {}
+      }
+    `;
+    expect(transform(input)).toBe(output);
   });
 
   describe("Component detection", () => {
     it("transforms Component subclass (named import case)", () => {
-      expect(transform(`import { Component } from "react";
-class C extends Component {}`)).toBe(`import { Component } from "react";
-const C = () => {};`);
+      const input = dedent`
+        import { Component } from "react";
+        class C extends Component {}
+      `;
+      const output = dedent`
+        import { Component } from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms PureComponent subclass", () => {
-      expect(transform(`import React from "react";
-class C extends React.PureComponent {}`)).toBe(`import React from "react";
-const C = () => {};`);
+      const input = dedent`
+        import React from "react";
+        class C extends React.PureComponent {}
+      `;
+      const output = dedent`
+        import React from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms Component subclass (renamed import case)", () => {
-      expect(transform(`import { Component as CBase } from "react";
-class C extends CBase {}`)).toBe(`import { Component as CBase } from "react";
-const C = () => {};`);
+      const input = dedent`
+        import { Component as CBase } from "react";
+        class C extends CBase {}
+      `;
+      const output = dedent`
+        import { Component as CBase } from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms React.Component subclass (global case)", () => {
-      expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
+      const input = dedent`
+        class C extends React.Component {}
+      `;
+      const output = dedent`
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms React.Component subclass (default import case)", () => {
-      expect(transform(`import React from "react";
-class C extends React.Component {}`)).toBe(`import React from "react";
-const C = () => {};`);
+      const input = dedent`
+        import React from "react";
+        class C extends React.Component {}
+      `;
+      const output = dedent`
+        import React from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms React.Component subclass (namespace import case)", () => {
-      expect(transform(`import * as React from "react";
-class C extends React.Component {}`)).toBe(`import * as React from "react";
-const C = () => {};`);
+      const input = dedent`
+        import * as React from "react";
+        class C extends React.Component {}
+      `;
+      const output = dedent`
+        import * as React from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("transforms React.Component subclass (renamed default import case)", () => {
-      expect(transform(`import MyReact from "react";
-class C extends MyReact.Component {}`)).toBe(`import MyReact from "react";
-const C = () => {};`);
+      const input = dedent`
+        import MyReact from "react";
+        class C extends MyReact.Component {}
+      `;
+      const output = dedent`
+        import MyReact from "react";
+        const C = () => {};
+      `;
+      expect(transform(input)).toBe(output);
     });
 
     it("ignores plain classes", () => {
-      expect(transform("class C {}")).toBe("class C {}");
+      const input = dedent`
+        class C {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores complex inheritance", () => {
-      expect(transform("class C extends mixin() {}")).toBe("class C extends mixin() {}");
+      const input = dedent`
+        class C extends mixin() {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-Component subclass (named import case)", () => {
-      expect(transform(`import { Componen } from "react";
-class C extends Componen {}`)).toBe(`import { Componen } from "react";
-class C extends Componen {}`);
+      const input = dedent`
+        import { Componen } from "react";
+        class C extends Componen {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-Component subclass (renamed import case)", () => {
-      expect(transform(`import { Componen as Component } from "react";
-class C extends Component {}`)).toBe(`import { Componen as Component } from "react";
-class C extends Component {}`);
+      const input = dedent`
+        import { Componen as Component } from "react";
+        class C extends Component {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-Component subclass (global case)", () => {
-      expect(transform("class C extends React.Componen {}")).toBe("class C extends React.Componen {}");
+      const input = dedent`
+        class C extends React.Componen {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-Component subclass (default import case)", () => {
-      expect(transform(`import React from "react";
-class C extends React.Componen {}`)).toBe(`import React from "react";
-class C extends React.Componen {}`);
+      const input = dedent`
+        import React from "react";
+        class C extends React.Componen {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-Component subclass (namespace import case)", () => {
-      expect(transform(`import * as React from "react";
-class C extends React.Componen {}`)).toBe(`import * as React from "react";
-class C extends React.Componen {}`);
+      const input = dedent`
+        import * as React from "react";
+        class C extends React.Componen {}
+      `;
+      expect(transform(input)).toBe(input);
     });
 
     it("ignores non-React subclass (non-react import case)", () => {
-      expect(transform(`import React from "reeeeact";
-class C extends React.Component {}`)).toBe(`import React from "reeeeact";
-class C extends React.Component {}`);
+      const input = dedent`
+        import React from "reeeeact";
+        class C extends React.Component {}
+      `;
+      expect(transform(input)).toBe(input);
     });
   });
 });
