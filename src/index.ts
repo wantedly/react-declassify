@@ -9,9 +9,6 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
   return {
     name: "react-declassify",
     visitor: {
-      // Program(path) {
-      //   console.dir(path.node, { depth: null });
-      // },
       ClassDeclaration(path, state) {
         const ts = isTS(state);
         const head = analyzeHead(path);
