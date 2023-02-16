@@ -43,6 +43,15 @@ describe("react-declassify", () => {
     expect(transform("class C extends React.Component {}")).toBe("const C = () => {};");
   });
 
+  it("adds error message when analysis failed", () => {
+    expect(transform(`class C extends React.Component {
+  rende() {}
+}`)).toBe(`/* react-declassify:disabled Cannot perform transformation: Unrecognized class element: rende */
+class C extends React.Component {
+  rende() {}
+}`);
+  });
+
   describe("Component detection", () => {
     it("transforms Component subclass (named import case)", () => {
       expect(transform(`import { Component } from "react";

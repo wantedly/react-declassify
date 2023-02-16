@@ -9,38 +9,69 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
   return {
     name: "react-declassify",
     visitor: {
+      // Program(path) {
+      //   console.dir(path.node, { depth: null });
+      // },
       ClassDeclaration(path, state) {
         const ts = isTS(state);
         const head = analyzeHead(path);
         if (!head) {
           return;
         }
-        const body = analyzeBody(path);
-        path.replaceWith(t.variableDeclaration("const", [
-          t.variableDeclarator(
-            ts
-            ? assignTypeAnnotation(
-              t.cloneNode(path.node.id),
-              t.tsTypeAnnotation(
-                t.tsTypeReference(
-                  t.tsQualifiedName(
-                    t.identifier("React"),
-                    t.identifier("FC"),
+        try {
+          const body = analyzeBody(path);
+          path.replaceWith(t.variableDeclaration("const", [
+            t.variableDeclarator(
+              ts
+              ? assignTypeAnnotation(
+                t.cloneNode(path.node.id),
+                t.tsTypeAnnotation(
+                  t.tsTypeReference(
+                    t.tsQualifiedName(
+                      t.identifier("React"),
+                      t.identifier("FC"),
+                    ),
                   ),
                 ),
+              )
+              : t.cloneNode(path.node.id),
+              t.arrowFunctionExpression([],
+                body.render
+                  ? body.render.node.body
+                  : t.blockStatement([])
               ),
             )
-            : t.cloneNode(path.node.id),
-            t.arrowFunctionExpression([],
-              body.render
-                ? body.render.node.body
-                : t.blockStatement([])
-            ),
-          )
-        ]));
+          ]));
+        } catch (e) {
+          if (!(e instanceof AnalysisError)) {
+            throw e;
+          }
+          t.addComment(path.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
+          refreshComments(path.node);
+        }
       },
     },
   };
+}
+
+/**
+ * Refreshes recast's internal state to force generically printing comments.
+ */
+function refreshComments(node: any) {
+  for (const comment of node.leadingComments ?? []) {
+    comment.leading ??= true;
+    comment.trailing ??= false;
+  }
+  for (const comment of node.trailingComments ?? []) {
+    comment.leading ??= false;
+    comment.trailing ??= true;
+  }
+  node.comments = [
+    ...node.leadingComments ?? [],
+    ...node.innerComments ?? [],
+    ...node.trailingComments ?? [],
+  ];
+  node.original = undefined;
 }
 
 type ComponentHead = {
@@ -143,8 +174,26 @@ function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
       const name = memberName(itemPath.node);
       if (name === "render") {
         data.render = itemPath;
+      } else {
+        throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
+    } else if (
+      itemPath.isClassProperty()
+      || itemPath.isClassPrivateMethod()
+      || itemPath.isClassPrivateProperty()
+      || itemPath.isTSDeclareMethod()
+    ) {
+      const name = memberName(itemPath.node);
+      throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
+    } else {
+      throw new AnalysisError("Unrecognized class element");
     }
   }
   return data;
+}
+
+class AnalysisError extends Error {
+  static {
+    this.prototype.name = "AnalysisError";
+  }
 }
