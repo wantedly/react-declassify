@@ -1,5 +1,5 @@
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, TSType } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, MemberExpression, TSType } from "@babel/types";
 import { assignTypeAnnotation, importName, isTS, memberName, memberRefName } from "./utils.js";
 
 type Options = {};
@@ -17,6 +17,12 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         }
         try {
           const body = analyzeBody(path);
+          for (const tr of body.render.thisRefs) {
+            if (tr.kind === "props") {
+              // this.props -> props
+              tr.path.replaceWith(tr.path.node.property);
+            }
+          }
           path.replaceWith(t.variableDeclaration("const", [
             t.variableDeclarator(
               ts
@@ -32,10 +38,9 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                 ),
               )
               : t.cloneNode(path.node.id),
-              t.arrowFunctionExpression([],
-                body.render
-                  ? body.render.node.body
-                  : t.blockStatement([])
+              t.arrowFunctionExpression(
+                needsProps(body) ? [t.identifier("props")] : [],
+                body.render.path.node.body
               ),
             )
           ]));
@@ -161,16 +166,16 @@ function isReactRef(r: RefInfo): boolean {
 }
 
 type ComponentBody = {
-  render?: NodePath<ClassMethod>;
+  render: RenderAnalysis;
 };
 
 function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
-  const data: ComponentBody = {};
+  const data: Partial<ComponentBody> = {};
   for (const itemPath of path.get("body").get("body")) {
     if (itemPath.isClassMethod()) {
       const name = memberName(itemPath.node);
       if (name === "render") {
-        data.render = itemPath;
+        data.render = analyzeRender(itemPath);
       } else {
         throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
@@ -186,7 +191,64 @@ function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
       throw new AnalysisError("Unrecognized class element");
     }
   }
-  return data;
+  if (!data.render) {
+    throw new AnalysisError(`Missing render method`);
+  }
+  return {
+    ...data,
+    render: data.render,
+  };
+}
+
+type RenderAnalysis = {
+  path: NodePath<ClassMethod>;
+  thisRefs: ThisRef[];
+};
+
+function analyzeRender(path: NodePath<ClassMethod>): RenderAnalysis {
+  const thisRefs: ThisRef[] = [];
+  path.traverse({
+    ThisExpression(path) {
+      const parentPath = path.parentPath;
+      if (!parentPath.isMemberExpression()) {
+        throw new AnalysisError(`Stray this`);
+      }
+      const name = memberRefName(parentPath.node);
+      if (name === "props") {
+        thisRefs.push({
+          kind: "props",
+          path: parentPath,
+        });
+      } else {
+        throw new AnalysisError(`Unrecognized class field reference: ${name ?? "<computed>"}`);
+      }
+    },
+    FunctionDeclaration(path) {
+      path.skip();
+    },
+    FunctionExpression(path) {
+      path.skip();
+    },
+    ClassDeclaration(path) {
+      path.skip();
+    },
+    ClassExpression(path) {
+      path.skip();
+    },
+    ObjectMethod(path) {
+      path.skip();
+    },
+  });
+  return { path, thisRefs };
+}
+
+type ThisRef = {
+  kind: "props";
+  path: NodePath<MemberExpression>;
+};
+
+function needsProps(body: ComponentBody): boolean {
+  return body.render.thisRefs.some((r) => r.kind === "props");
 }
 
 class AnalysisError extends Error {
