@@ -70,7 +70,7 @@ describe("react-declassify", () => {
       }
     `;
     const output = dedent`
-      /* react-declassify:disabled Cannot perform transformation: Unrecognized class element: rende */
+      /* react-declassify:disabled Cannot perform transformation: Missing render method */
       class C extends React.Component {
         rende() {}
       }
@@ -250,6 +250,32 @@ describe("react-declassify", () => {
         }
       `;
       expect(transform(input)).toBe(input);
+    });
+  });
+
+  describe("Method transformation", () => {
+    it("transforms methods as functions", () => {
+      const input = dedent`
+        class C extends React.Component {
+          render() {
+            return null;
+          }
+
+          foo(x) {
+            return x + 42;
+          }
+        }
+      `;
+      const output = dedent`
+        const C = () => {
+          function foo(x) {
+            return x + 42;
+          }
+
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
     });
   });
 

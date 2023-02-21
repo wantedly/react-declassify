@@ -1,3 +1,4 @@
+import type { Identifier, Pattern, RestElement, Statement } from "@babel/types";
 import type { PluginObj, PluginPass } from "@babel/core";
 import { assignTypeAnnotation, isTS } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, needsProps } from "./analysis.js";
@@ -23,6 +24,17 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
               tr.path.replaceWith(tr.path.node.property);
             }
           }
+          const preamble: Statement[] = [];
+          for (const [, mem] of body.members.entries()) {
+            const methNode = mem.path.node;
+            preamble.push(t.functionDeclaration(
+              methNode.key as Identifier,
+              methNode.params as (Identifier | RestElement | Pattern)[],
+              methNode.body,
+            ));
+          }
+          const bodyNode = body.render.path.node.body;
+          bodyNode.body.splice(0, 0, ...preamble);
           path.replaceWith(t.variableDeclaration("const", [
             t.variableDeclarator(
               ts
@@ -40,7 +52,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
               : t.cloneNode(path.node.id),
               t.arrowFunctionExpression(
                 needsProps(body) ? [t.identifier("props")] : [],
-                body.render.path.node.body
+                bodyNode
               ),
             )
           ]));

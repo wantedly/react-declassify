@@ -2,6 +2,45 @@ import type { NodePath } from "@babel/core";
 import type { ClassDeclaration, ClassMethod, Expression, ImportDeclaration, MemberExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
+const SPECIAL_MEMBER_NAMES = new Set<string>([
+  // Special variables
+  "context",
+  "props",
+  "refs",
+  "state",
+  // Lifecycle
+  "constructor",
+  "render",
+  "componentDidCatch",
+  "componentDidMount",
+  "componentDidUpdate",
+  "componentWillMount",
+  "UNSAFE_componentWillMount",
+  "componentWillReceiveProps",
+  "UNSAFE_componentWillReceiveProps",
+  "componentWillUpdate",
+  "UNSAFE_componentWillUpdate",
+  "componentWillUnmount",
+  // Lifecycle predicates
+  "shouldComponentUpdate",
+  "getSnapshotBeforeUpdate",
+  "getChildContext",
+  // APIs (including deprecated)
+  "isReactComponent",
+  "isMounted",
+  "forceUpdate",
+  "setState",
+  "replaceState",
+]);
+const SPECIAL_STATIC_NAMES = new Set<string>([
+  "childContextTypes",
+  "contextTypes",
+  "contextType",
+  "defaultProps",
+  "getDerivedStateFromError",
+  "getDerivedStateFromProps",
+]);
+
 export type ComponentHead = {
   props: NodePath<TSType> | undefined;
 };
@@ -93,15 +132,22 @@ function isReactRef(r: RefInfo): boolean {
 
 export type ComponentBody = {
   render: RenderAnalysis;
+  members: Map<string, MethodAnalysis>;
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
-  const data: Partial<ComponentBody> = {};
+  let render: RenderAnalysis | undefined = undefined;
+  const members = new Map<string, MethodAnalysis>();
   for (const itemPath of path.get("body").get("body")) {
     if (itemPath.isClassMethod()) {
       const name = memberName(itemPath.node);
       if (name === "render") {
-        data.render = analyzeRender(itemPath);
+        render = analyzeRender(itemPath);
+      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
+        if (members.has(name)) {
+          throw new AnalysisError(`Duplicate member: ${name}`);
+        }
+        members.set(name, analyzeMethod(itemPath));
       } else {
         throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
@@ -117,12 +163,12 @@ export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
       throw new AnalysisError("Unrecognized class element");
     }
   }
-  if (!data.render) {
+  if (!render) {
     throw new AnalysisError(`Missing render method`);
   }
   return {
-    ...data,
-    render: data.render,
+    render,
+    members,
   };
 }
 
@@ -132,6 +178,19 @@ export type RenderAnalysis = {
 };
 
 function analyzeRender(path: NodePath<ClassMethod>): RenderAnalysis {
+  return { path, thisRefs: analyzeThisRefs(path) };
+}
+
+export type MethodAnalysis = {
+  path: NodePath<ClassMethod>;
+  thisRefs: ThisRef[];
+};
+
+function analyzeMethod(path: NodePath<ClassMethod>): MethodAnalysis {
+  return { path, thisRefs: analyzeThisRefs(path) };
+}
+
+function analyzeThisRefs(path: NodePath<ClassMethod>): ThisRef[] {
   const thisRefs: ThisRef[] = [];
   path.traverse({
     ThisExpression(path) {
@@ -165,7 +224,7 @@ function analyzeRender(path: NodePath<ClassMethod>): RenderAnalysis {
       path.skip();
     },
   });
-  return { path, thisRefs };
+  return thisRefs;
 }
 
 export type ThisRef = {
