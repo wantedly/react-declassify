@@ -204,6 +204,12 @@ function analyzeThisRefs(path: NodePath<ClassMethod>): ThisRef[] {
           kind: "props",
           path: parentPath,
         });
+      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
+        thisRefs.push({
+          kind: "userDefined",
+          path: parentPath,
+          name,
+        });
       } else {
         throw new AnalysisError(`Unrecognized class field reference: ${name ?? "<computed>"}`);
       }
@@ -230,6 +236,10 @@ function analyzeThisRefs(path: NodePath<ClassMethod>): ThisRef[] {
 export type ThisRef = {
   kind: "props";
   path: NodePath<MemberExpression>;
+} | {
+  kind: "userDefined";
+  path: NodePath<MemberExpression>;
+  name: string;
 };
 
 export function needsProps(body: ComponentBody): boolean {

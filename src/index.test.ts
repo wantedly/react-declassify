@@ -258,6 +258,7 @@ describe("react-declassify", () => {
       const input = dedent`
         class C extends React.Component {
           render() {
+            this.foo(100);
             return null;
           }
 
@@ -272,6 +273,7 @@ describe("react-declassify", () => {
             return x + 42;
           }
 
+          foo(100);
           return null;
         };
       `;

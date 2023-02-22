@@ -22,6 +22,9 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (tr.kind === "props") {
               // this.props -> props
               tr.path.replaceWith(tr.path.node.property);
+            } else if (tr.kind === "userDefined") {
+              // this.foo -> foo
+              tr.path.replaceWith(tr.path.node.property);
             }
           }
           const preamble: Statement[] = [];
