@@ -17,7 +17,10 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           return;
         }
         try {
-          const body = analyzeBody(path);
+          const body = analyzeBody(path, babel);
+          for (const ren of body.render.renames) {
+            ren.scope.rename(ren.oldName, ren.newName);
+          }
           for (const tr of body.render.thisRefs) {
             if (tr.kind === "props") {
               // this.props -> props

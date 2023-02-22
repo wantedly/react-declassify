@@ -253,6 +253,36 @@ describe("react-declassify", () => {
     });
   });
 
+  describe("Render function transformation", () => {
+    it("Renames local variables to avoid capturing", () => {
+      const input = dedent`
+        class C extends React.Component {
+          render() {
+            const x = 42;
+            this.foo(100);
+            return x;
+          }
+
+          foo() {
+            return x + 42;
+          }
+        }
+      `;
+      const output = dedent`
+        const C = () => {
+          function foo() {
+            return x + 42;
+          }
+
+          const x0 = 42;
+          foo(100);
+          return x0;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   describe("Method transformation", () => {
     it("transforms methods as functions", () => {
       const input = dedent`

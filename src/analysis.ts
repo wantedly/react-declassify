@@ -1,5 +1,6 @@
 import type { NodePath } from "@babel/core";
-import type { ClassDeclaration, ClassMethod, Expression, ImportDeclaration, MemberExpression, TSType } from "@babel/types";
+import type { Scope } from "@babel/traverse";
+import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, JSXIdentifier, MemberExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -135,14 +136,15 @@ export type ComponentBody = {
   members: Map<string, MethodAnalysis>;
 };
 
-export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
+export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
+  const locals = analyzeOuterCapturings(path);
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   for (const itemPath of path.get("body").get("body")) {
     if (itemPath.isClassMethod()) {
       const name = memberName(itemPath.node);
       if (name === "render") {
-        render = analyzeRender(itemPath);
+        render = analyzeRender(itemPath, babel, locals);
       } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
         if (members.has(name)) {
           throw new AnalysisError(`Duplicate member: ${name}`);
@@ -175,10 +177,26 @@ export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
 export type RenderAnalysis = {
   path: NodePath<ClassMethod>;
   thisRefs: ThisRef[];
+  renames: LocalRename[];
 };
 
-function analyzeRender(path: NodePath<ClassMethod>): RenderAnalysis {
-  return { path, thisRefs: analyzeThisRefs(path) };
+export type LocalRename = {
+  scope: Scope,
+  oldName: string;
+  newName: string;
+};
+
+function analyzeRender(path: NodePath<ClassMethod>, babel: typeof import("@babel/core"), locals: Set<string>): RenderAnalysis {
+  const renames: LocalRename[] = [];
+  for (const [name, binding] of Object.entries(path.scope.bindings)) {
+    const newName = newLocal(name, babel, locals);
+    renames.push({
+      scope: binding.scope,
+      oldName: name,
+      newName,
+    });
+  }
+  return { path, thisRefs: analyzeThisRefs(path), renames };
 }
 
 export type MethodAnalysis = {
@@ -241,6 +259,51 @@ export type ThisRef = {
   path: NodePath<MemberExpression>;
   name: string;
 };
+
+function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<string> {
+  const capturings = new Set<string>();
+  function visitIdent(path: NodePath<Identifier | JSXIdentifier>) {
+    path.getOuterBindingIdentifiers
+    const binding = path.scope.getBinding(path.node.name);
+    if (!binding || binding.path.isAncestor(classPath)) {
+      capturings.add(path.node.name);
+    }
+  }
+  classPath.get("body").traverse({
+    Identifier(path) {
+      if (path.isReferencedIdentifier()) {
+        visitIdent(path);
+      }
+    },
+    JSXIdentifier(path) {
+      if (path.isReferencedIdentifier()) {
+        visitIdent(path);
+      }
+    }
+  });
+  return capturings;
+}
+
+function newLocal(baseName: string, babel: typeof import("@babel/core"), locals: Set<string>): string {
+  let name = baseName.replace(/[^\p{ID_Continue}$\u200C\u200D]/gu, "");
+  if (!/^[\p{ID_Start}_$]/u.test(name) || !babel.types.isValidIdentifier(name)) {
+    name = `_${name}`;
+  }
+  if (locals.has(name)) {
+    name = name.replace(/\d+$/, "");
+    for (let i = 0;; i++) {
+      if (i >= 1000000) {
+        throw new Error("Unexpected infinite loop");
+      }
+      if (!locals.has(`${name}${i}`)) {
+        name = `${name}${i}`;
+        break;
+      }
+    }
+  }
+  locals.add(name);
+  return name;
+}
 
 export function needsProps(body: ComponentBody): boolean {
   return body.render.thisRefs.some((r) => r.kind === "props");
