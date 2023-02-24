@@ -2,10 +2,10 @@
 
 /** @type {import("@babel/core").TransformOptions} */
 const config = {
-  targets: "node 18",
+  extends: "./babel.config.js",
   presets: [
-    ["@babel/env", { modules: false }],
-    ["@babel/typescript", { allowDeclareFields: true }],
+    ["@babel/env", { modules: "commonjs" }],
   ],
 };
 export default config;
+
