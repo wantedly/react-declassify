@@ -134,10 +134,12 @@ function isReactRef(r: RefInfo): boolean {
 export type ComponentBody = {
   render: RenderAnalysis;
   members: Map<string, MethodAnalysis>;
+  thisRefs: ThisRef[];
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const locals = analyzeOuterCapturings(path);
+  const thisRefs = analyzeThisRefs(path);
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   for (const itemPath of path.get("body").get("body")) {
@@ -171,12 +173,12 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   return {
     render,
     members,
+    thisRefs,
   };
 }
 
 export type RenderAnalysis = {
   path: NodePath<ClassMethod>;
-  thisRefs: ThisRef[];
   renames: LocalRename[];
 };
 
@@ -196,20 +198,44 @@ function analyzeRender(path: NodePath<ClassMethod>, babel: typeof import("@babel
       newName,
     });
   }
-  return { path, thisRefs: analyzeThisRefs(path), renames };
+  return { path, renames };
 }
 
 export type MethodAnalysis = {
   path: NodePath<ClassMethod>;
-  thisRefs: ThisRef[];
 };
 
 function analyzeMethod(path: NodePath<ClassMethod>): MethodAnalysis {
-  return { path, thisRefs: analyzeThisRefs(path) };
+  return { path };
 }
 
-function analyzeThisRefs(path: NodePath<ClassMethod>): ThisRef[] {
+function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
   const thisRefs: ThisRef[] = [];
+  for (const mem of path.get("body").get("body")) {
+    if (mem.isClassMethod()) {
+      if (mem.node.static) {
+        // TODO
+      } else {
+        for (const param of mem.get("params")) {
+          analyzeThisRefsIn(thisRefs, param);
+        }
+        analyzeThisRefsIn(thisRefs, mem.get("body"));
+      }
+    } else if (mem.isClassProperty()) {
+      if (mem.node.static) {
+        // TODO
+      } else {
+        const value = mem.get("value");
+        if (value.isExpression()) {
+          analyzeThisRefsIn(thisRefs, value);
+        }
+      }
+    }
+  }
+  return thisRefs;
+}
+
+function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath) {
   path.traverse({
     ThisExpression(path) {
       const parentPath = path.parentPath;
@@ -248,7 +274,6 @@ function analyzeThisRefs(path: NodePath<ClassMethod>): ThisRef[] {
       path.skip();
     },
   });
-  return thisRefs;
 }
 
 export type ThisRef = {
@@ -306,7 +331,7 @@ function newLocal(baseName: string, babel: typeof import("@babel/core"), locals:
 }
 
 export function needsProps(body: ComponentBody): boolean {
-  return body.render.thisRefs.some((r) => r.kind === "props");
+  return body.thisRefs.some((r) => r.kind === "props");
 }
 
 export class AnalysisError extends Error {

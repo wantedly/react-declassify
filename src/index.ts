@@ -21,7 +21,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           for (const ren of body.render.renames) {
             ren.scope.rename(ren.oldName, ren.newName);
           }
-          for (const tr of body.render.thisRefs) {
+          for (const tr of body.thisRefs) {
             if (tr.kind === "props") {
               // this.props -> props
               tr.path.replaceWith(tr.path.node.property);

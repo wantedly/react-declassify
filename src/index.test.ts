@@ -309,6 +309,32 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("transforms this.props in methods", () => {
+      const input = dedent`
+        class C extends React.Component {
+          render() {
+            this.foo();
+            return null;
+          }
+
+          foo() {
+            return this.props.foo + 42;
+          }
+        }
+      `;
+      const output = dedent`
+        const C = props => {
+          function foo() {
+            return props.foo + 42;
+          }
+
+          foo();
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   it("transforms props", () => {
