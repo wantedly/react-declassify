@@ -18,7 +18,22 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         }
         try {
           const body = analyzeBody(path, babel);
+          for (const pv of body.propVars) {
+            if (pv.oldName !== pv.newName) {
+              // Rename variables that props are bound to.
+              // E.g. `foo` as in `const { foo } = this.props`.
+              // This is to ensure we hoist them correctly.
+              pv.scope.rename(pv.oldName, pv.newName);
+            }
+          }
+          for (const pb of body.propBinders) {
+            // Remove assignments of this.props.
+            // We re-add them later to achieve hoisting.
+            pb.path.remove();
+          }
           for (const ren of body.render.renames) {
+            // Rename local variables in the render method
+            // to avoid unintentional variable capturing.
             ren.scope.rename(ren.oldName, ren.newName);
           }
           for (const tr of body.thisRefs) {
@@ -30,8 +45,28 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
               tr.path.replaceWith(tr.path.node.property);
             }
           }
+          // Preamble is a set of statements to be added before the original render body.
           const preamble: Statement[] = [];
+          if (body.propVarNames.size > 0) {
+            // Expand this.props into variables.
+            // E.g. const { foo, bar } = this.props;
+            preamble.push(t.variableDeclaration("const", [
+              t.variableDeclarator(
+                t.objectPattern(Array.from(body.propVarNames.entries()).map(([propName, localName]) =>
+                  t.objectProperty(
+                    t.identifier(propName),
+                    t.identifier(localName),
+                    false,
+                    propName === localName,
+                  ),
+                )),
+                // this.props
+                t.memberExpression(t.thisExpression(), t.identifier("props")),
+              ),
+            ]));
+          }
           for (const [, mem] of body.members.entries()) {
+            // Method definitions.
             const methNode = mem.path.node;
             preamble.push(t.functionDeclaration(
               methNode.key as Identifier,

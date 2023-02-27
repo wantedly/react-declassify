@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, JSXIdentifier, MemberExpression, TSType } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -135,18 +135,22 @@ export type ComponentBody = {
   render: RenderAnalysis;
   members: Map<string, MethodAnalysis>;
   thisRefs: ThisRef[];
+  propVars: PropVar[];
+  propVarNames: Map<string, string>;
+  propBinders: PropBinder[];
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const locals = analyzeOuterCapturings(path);
   const thisRefs = analyzeThisRefs(path);
+  const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   for (const itemPath of path.get("body").get("body")) {
     if (itemPath.isClassMethod()) {
       const name = memberName(itemPath.node);
       if (name === "render") {
-        render = analyzeRender(itemPath, babel, locals);
+        render = analyzeRender(itemPath, babel, locals, propVars);
       } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
         if (members.has(name)) {
           throw new AnalysisError(`Duplicate member: ${name}`);
@@ -174,6 +178,9 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     render,
     members,
     thisRefs,
+    propVars,
+    propVarNames,
+    propBinders,
   };
 }
 
@@ -188,9 +195,20 @@ export type LocalRename = {
   newName: string;
 };
 
-function analyzeRender(path: NodePath<ClassMethod>, babel: typeof import("@babel/core"), locals: Set<string>): RenderAnalysis {
+function analyzeRender(
+  path: NodePath<ClassMethod>,
+  babel: typeof import("@babel/core"),
+  locals: Set<string>,
+  propVars: PropVar[],
+): RenderAnalysis {
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
+    if (
+      propVars.some((pv) => pv.scope === binding.scope && pv.oldName ===name)
+    ) {
+      // Already handled as a propVar
+      continue;
+    }
     const newName = newLocal(name, babel, locals);
     renames.push({
       scope: binding.scope,
@@ -207,6 +225,148 @@ export type MethodAnalysis = {
 
 function analyzeMethod(path: NodePath<ClassMethod>): MethodAnalysis {
   return { path };
+}
+
+export type PropVar = {
+  scope: Scope;
+  propName: string;
+  oldName: string;
+  newName: string;
+};
+
+export type PropBinder = {
+  path: NodePath;
+};
+
+/**
+ * Detects assignments that expand `this.props` to variables, like:
+ * 
+ * ```js
+ * const { foo, bar } = this.props;
+ * ```
+ * 
+ * or:
+ * 
+ * ```js
+ * const foo = this.props.foo;
+ * const bar = this.props.bar;
+ * ```
+ */
+function analyzeProps(
+  thisRefs: ThisRef[],
+  babel: typeof import("@babel/core"),
+  locals: Set<string>,
+): {
+  propVars: PropVar[];
+  propVarNames: Map<string, string>;
+  propBinders: PropBinder[];
+} {
+  const propVars: PropVar[] = [];
+  const propVarNames = new Map<string, string>();
+  const propBinders: PropBinder[] = [];
+
+  function getNewName(propName: string): string {
+    const reusable = propVarNames.get(propName);
+    if (reusable != null) return reusable;
+
+    const newName = newLocal(propName, babel, locals);
+    propVarNames.set(propName, newName);
+    return newName;
+  }
+
+  for (const thisRef of thisRefs) {
+    if (thisRef.kind !== "props") {
+      continue;
+    }
+    const memPath = thisRef.path;
+    if (
+      memPath.parentPath.isMemberExpression()
+      && memPath.parentPath.node.object === memPath.node
+      && memPath.parentPath.parentPath.isVariableDeclarator()
+      && memPath.parentPath.parentPath.node.init === memPath.parentPath.node
+    ) {
+      const propPath = memPath.parentPath;
+      const declaratorPath = memPath.parentPath.parentPath;
+      const declarationPath = memPath.parentPath.parentPath.parentPath;
+      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
+        continue;
+      }
+      const lval = declaratorPath.get("id");
+      if (!lval.isIdentifier()) {
+        continue;
+      }
+      const propName = memberRefName(propPath.node);
+      if (propName == null) {
+        continue;
+      }
+      
+      // const foo = this.props.foo;
+      propVars.push({
+        scope: memPath.scope,
+        propName,
+        oldName: lval.node.name,
+        newName: getNewName(propName),
+      });
+      if (declarationPath.node.declarations.length === 1) {
+        propBinders.push({
+          path: declarationPath,
+        });
+      } else {
+        propBinders.push({
+          path: declaratorPath,
+        });
+      }
+    } else if (
+      memPath.parentPath.isVariableDeclarator()
+      && memPath.parentPath.node.init === memPath.node
+    ) {
+      const declaratorPath = memPath.parentPath;
+      const declarationPath = memPath.parentPath.parentPath;
+      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
+        continue;
+      }
+      const lval = declaratorPath.get("id");
+      if (!lval.isObjectPattern()) {
+        continue;
+      }
+
+      // const { foo } = this.props;
+      const lvpropPaths: NodePath[] = [];
+      let replaceAll = true;
+      for (const lvprop of lval.get("properties")) {
+        if (!lvprop.isObjectProperty()) {
+          replaceAll = false;
+          break;
+        }
+        const propName = memberName(lvprop.node);
+        if (propName == null) {
+          replaceAll = false;
+          break;
+        }
+        if (lvprop.node.value.type === "Identifier") {
+          propVars.push({
+            scope: memPath.scope,
+            propName,
+            oldName: lvprop.node.value.name,
+            newName: getNewName(propName),
+          });
+          lvpropPaths.push(lvprop);
+        } else {
+          replaceAll = false;
+        }
+      }
+      if (replaceAll && declarationPath.node.declarations.length === 1) {
+        propBinders.push({ path: declarationPath });
+      } else if (replaceAll) {
+        propBinders.push({ path: declaratorPath });
+      } else {
+        for (const lvprop of lvpropPaths) {
+          propBinders.push({ path: lvprop });
+        }
+      }
+    }
+  }
+  return { propVars, propVarNames, propBinders };
 }
 
 function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
@@ -236,28 +396,32 @@ function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
 }
 
 function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath) {
+  traverseThis(path, (path) => {
+    const parentPath = path.parentPath;
+    if (!parentPath.isMemberExpression()) {
+      throw new AnalysisError(`Stray this`);
+    }
+    const name = memberRefName(parentPath.node);
+    if (name === "props") {
+      thisRefs.push({
+        kind: "props",
+        path: parentPath,
+      });
+    } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
+      thisRefs.push({
+        kind: "userDefined",
+        path: parentPath,
+        name,
+      });
+    } else {
+      throw new AnalysisError(`Unrecognized class field reference: ${name ?? "<computed>"}`);
+    }
+  });
+}
+
+function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {
   path.traverse({
-    ThisExpression(path) {
-      const parentPath = path.parentPath;
-      if (!parentPath.isMemberExpression()) {
-        throw new AnalysisError(`Stray this`);
-      }
-      const name = memberRefName(parentPath.node);
-      if (name === "props") {
-        thisRefs.push({
-          kind: "props",
-          path: parentPath,
-        });
-      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
-        thisRefs.push({
-          kind: "userDefined",
-          path: parentPath,
-          name,
-        });
-      } else {
-        throw new AnalysisError(`Unrecognized class field reference: ${name ?? "<computed>"}`);
-      }
-    },
+    ThisExpression: visit,
     FunctionDeclaration(path) {
       path.skip();
     },

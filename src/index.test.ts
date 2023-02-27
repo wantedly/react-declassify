@@ -335,6 +335,38 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("hoists this.props expansion", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            const { bar, baz } = this.props;
+            return this.meth() + bar + baz;
+          }
+
+          meth() {
+            const { foo, bar } = this.props;
+            return foo + bar;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = props => {
+          const {
+            bar,
+            baz,
+            foo
+          } = this.props;
+
+          function meth() {
+            return foo + bar;
+          }
+
+          return meth() + bar + baz;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   it("transforms props", () => {
