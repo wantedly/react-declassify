@@ -21,14 +21,14 @@ function transform(code: string, options: {
 
 describe("react-declassify", () => {
   it("transforms simple Component class", () => {
-    const input = dedent`
+    const input = dedent`\
       class C extends React.Component {
         render() {
           return <div>Hello, world!</div>;
         }
       }
     `;
-    const output = dedent`
+    const output = dedent`\
       const C = () => {
         return <div>Hello, world!</div>;
       };
@@ -37,14 +37,14 @@ describe("react-declassify", () => {
   });
 
   it("generates React.FC", () => {
-    const input = dedent`
+    const input = dedent`\
       class C extends React.Component {
         render() {
           return <div>Hello, world!</div>;
         }
       }
     `;
-    const output = dedent`
+    const output = dedent`\
       const C: React.FC = () => {
         return <div>Hello, world!</div>;
       };
@@ -53,10 +53,10 @@ describe("react-declassify", () => {
   });
 
   it("doesn't transform empty Component class", () => {
-    const input = dedent`
+    const input = dedent`\
       class C extends React.Component {}
     `;
-    const output = dedent`
+    const output = dedent`\
       /* react-declassify:disabled Cannot perform transformation: Missing render method */
       class C extends React.Component {}
     `;
@@ -64,12 +64,12 @@ describe("react-declassify", () => {
   });
 
   it("adds error message when analysis failed", () => {
-    const input = dedent`
+    const input = dedent`\
       class C extends React.Component {
         rende() {}
       }
     `;
-    const output = dedent`
+    const output = dedent`\
       /* react-declassify:disabled Cannot perform transformation: Missing render method */
       class C extends React.Component {
         rende() {}
@@ -80,13 +80,13 @@ describe("react-declassify", () => {
 
   describe("Component detection", () => {
     it("transforms Component subclass (named import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import { Component } from "react";
         class C extends Component {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import { Component } from "react";
         const C = () => {};
       `;
@@ -94,13 +94,13 @@ describe("react-declassify", () => {
     });
 
     it("transforms PureComponent subclass", () => {
-      const input = dedent`
+      const input = dedent`\
         import React from "react";
         class C extends React.PureComponent {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import React from "react";
         const C = () => {};
       `;
@@ -108,13 +108,13 @@ describe("react-declassify", () => {
     });
 
     it("transforms Component subclass (renamed import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import { Component as CBase } from "react";
         class C extends CBase {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import { Component as CBase } from "react";
         const C = () => {};
       `;
@@ -122,25 +122,25 @@ describe("react-declassify", () => {
     });
 
     it("transforms React.Component subclass (global case)", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends React.Component {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         const C = () => {};
       `;
       expect(transform(input)).toBe(output);
     });
 
     it("transforms React.Component subclass (default import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import React from "react";
         class C extends React.Component {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import React from "react";
         const C = () => {};
       `;
@@ -148,13 +148,13 @@ describe("react-declassify", () => {
     });
 
     it("transforms React.Component subclass (namespace import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import * as React from "react";
         class C extends React.Component {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import * as React from "react";
         const C = () => {};
       `;
@@ -162,13 +162,13 @@ describe("react-declassify", () => {
     });
 
     it("transforms React.Component subclass (renamed default import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import MyReact from "react";
         class C extends MyReact.Component {
           render() {}
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         import MyReact from "react";
         const C = () => {};
       `;
@@ -176,7 +176,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores plain classes", () => {
-      const input = dedent`
+      const input = dedent`\
         class C {
           render() {}
         }
@@ -185,7 +185,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores complex inheritance", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends mixin() {
           render() {}
         }
@@ -194,7 +194,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-Component subclass (named import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import { Componen } from "react";
         class C extends Componen {
           render() {}
@@ -204,7 +204,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-Component subclass (renamed import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import { Componen as Component } from "react";
         class C extends Component {
           render() {}
@@ -214,7 +214,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-Component subclass (global case)", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends React.Componen {
           render() {}
         }
@@ -223,7 +223,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-Component subclass (default import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import React from "react";
         class C extends React.Componen {
           render() {}
@@ -233,7 +233,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-Component subclass (namespace import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import * as React from "react";
         class C extends React.Componen {
           render() {}
@@ -243,7 +243,7 @@ describe("react-declassify", () => {
     });
 
     it("ignores non-React subclass (non-react import case)", () => {
-      const input = dedent`
+      const input = dedent`\
         import React from "reeeeact";
         class C extends React.Component {
           render() {}
@@ -255,7 +255,7 @@ describe("react-declassify", () => {
 
   describe("Render function transformation", () => {
     it("Renames local variables to avoid capturing", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends React.Component {
           render() {
             const x = 42;
@@ -268,7 +268,7 @@ describe("react-declassify", () => {
           }
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         const C = () => {
           function foo() {
             return x + 42;
@@ -285,7 +285,7 @@ describe("react-declassify", () => {
 
   describe("Method transformation", () => {
     it("transforms methods as functions", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends React.Component {
           render() {
             this.foo(100);
@@ -297,7 +297,7 @@ describe("react-declassify", () => {
           }
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         const C = () => {
           function foo(x) {
             return x + 42;
@@ -311,7 +311,7 @@ describe("react-declassify", () => {
     });
 
     it("transforms this.props in methods", () => {
-      const input = dedent`
+      const input = dedent`\
         class C extends React.Component {
           render() {
             this.foo();
@@ -323,7 +323,7 @@ describe("react-declassify", () => {
           }
         }
       `;
-      const output = dedent`
+      const output = dedent`\
         const C = props => {
           function foo() {
             return props.foo + 42;
@@ -338,14 +338,14 @@ describe("react-declassify", () => {
   });
 
   it("transforms props", () => {
-    const input = dedent`
+    const input = dedent`\
       class C extends React.Component {
         render() {
           return <div>Hello, {this.props.name}!</div>;
         }
       }
     `;
-    const output = dedent`
+    const output = dedent`\
       const C = props => {
         return <div>Hello, {props.name}!</div>;
       };

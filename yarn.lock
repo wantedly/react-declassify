@@ -1884,10 +1884,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@qnighy/dedent@qnighy/dedent-js#workspace=@qnighy/dedent&commit=fbcc79820cb8f1894caf154ee375afb132d740ee":
+"@qnighy/dedent@npm:^0.1.0":
   version: 0.1.0
-  resolution: "@qnighy/dedent@https://github.com/qnighy/dedent-js.git#workspace=%40qnighy%2Fdedent&commit=fbcc79820cb8f1894caf154ee375afb132d740ee"
-  checksum: c31d8eb420c3b605513d207d823e4bea23e7efabc1bdf839d4537f9d25193e99af7b8f93049f5d8e57136c8b1bf881ec35c4852472475ad93f85d4c95c1f5d00
+  resolution: "@qnighy/dedent@npm:0.1.0"
+  checksum: 3376f6c7d5f5733ec69cb1bcfbba9e395ac2feca59ad441b37f6396a2fbb77105c8d32d35621fd1fc65858f87241f4374cb81bdc7079f15005fd993d5b0d1431
   languageName: node
   linkType: hard
 
@@ -4906,7 +4906,7 @@ __metadata:
     "@babel/types": ^7.20.7
     "@codemod/core": ^2.0.1
     "@jest/globals": ^29.4.2
-    "@qnighy/dedent": "qnighy/dedent-js#workspace=@qnighy/dedent&commit=fbcc79820cb8f1894caf154ee375afb132d740ee"
+    "@qnighy/dedent": ^0.1.0
     "@types/babel__core": ^7.20.0
     "@types/babel__traverse": ^7.18.3
     "@yarnpkg/sdks": ^3.0.0-rc.39
