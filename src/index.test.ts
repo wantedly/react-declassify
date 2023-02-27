@@ -1,4 +1,4 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, test } from "@jest/globals";
 import { transform as transformCore } from "@codemod/core";
 import { dedent } from "@qnighy/dedent";
 import plugin from "./index.js";
@@ -380,6 +380,44 @@ describe("react-declassify", () => {
     const output = dedent`\
       const C = props => {
         return <div>Hello, {props.name}!</div>;
+      };
+    `;
+    expect(transform(input)).toBe(output);
+  });
+
+  test("readme example 1", () => {
+    const input = dedent`\
+      import React from "react";
+
+      export class C extends React.Component {
+        render() {
+          const { text, color } = this.props;
+          return <button style={{ color }} onClick={() => this.onClick()}>{text}</button>;
+        }
+
+        onClick() {
+          const { text, handleClick } = this.props;
+          alert(\`\${text} was clicked!\`);
+          handleClick();
+        }
+      }
+    `;
+    const output = dedent`\
+      import React from "react";
+
+      export const C = props => {
+        const {
+          text,
+          color,
+          handleClick
+        } = this.props;
+
+        function onClick() {
+          alert(\`\${text} was clicked!\`);
+          handleClick();
+        }
+
+        return <button style={{ color }} onClick={() => onClick()}>{text}</button>;
       };
     `;
     expect(transform(input)).toBe(output);

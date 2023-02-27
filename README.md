@@ -14,6 +14,48 @@ then
 npx codemod --plugin react-declassify 'src/**/*.tsx'
 ```
 
+## Example
+
+Before:
+
+```jsx
+import React from "react";
+
+export class C extends React.Component {
+  render() {
+    const { text, color } = this.props;
+    return <button style={{ color }} onClick={() => this.onClick()}>{text}</button>;
+  }
+
+  onClick() {
+    const { text, handleClick } = this.props;
+    alert(`${text} was clicked!`);
+    handleClick();
+  }
+}
+```
+
+After:
+
+```jsx
+import React from "react";
+
+export const C = props => {
+  const {
+    text,
+    color,
+    handleClick
+  } = this.props;
+
+  function onClick() {
+    alert(`${text} was clicked!`);
+    handleClick();
+  }
+
+  return <button style={{ color }} onClick={() => onClick()}>{text}</button>;
+};
+```
+
 ## Progress
 
 - [x] Convert render function (basic feature)
