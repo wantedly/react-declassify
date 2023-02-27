@@ -24,6 +24,13 @@
     "import": "./dist/index.js",
     "require": "./cjs/dist/index.js"
   },
+  "files": [
+    "cjs/dist/**/*",
+    "cjs/package.json",
+    "dist/**/*",
+    "src/**/*",
+    "!**/*.test.ts"
+  ],
   "scripts": {
     "build": "$npm_execpath build:esm && $npm_execpath build:cjs",
     "build:cjs": "babel -x .ts -d cjs/dist src --ignore '**/*.test.ts' --config-file ./babel-cjs.config.js",
