@@ -1,5 +1,22 @@
 {
   "name": "react-declassify",
+  "version": "0.1.0",
+  "description": "say goodbye to class components [EXPERIMENTAL]",
+  "keywords": [
+    "babel-plugin",
+    "babel-codemod",
+    "react"
+  ],
+  "homepage": "https://github.com/wantedly/react-declassify",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wantedly/react-declassify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wantedly/react-declassify/issues"
+  },
+  "license": "MIT",
+  "author": "Masaki Hara <ackie.h.gmai@gmail.com>",
   "packageManager": "yarn@3.4.1",
   "type": "module",
   "main": "./cjs/dist/index.js",
