@@ -56,9 +56,15 @@ export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | u
     return;
   }
   if (superClassRef.name === "Component" || superClassRef.name === "PureComponent") {
-    return {
-      props: undefined
-    };
+    let props: NodePath<TSType> | undefined;
+    const superTypeParameters = path.get("superTypeParameters");
+    if (superTypeParameters.isTSTypeParameterInstantiation()) {
+      const params = superTypeParameters.get("params");
+      if (params.length > 0) {
+        props = params[0];
+      }
+    }
+    return { props };
   }
 }
 

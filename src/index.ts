@@ -87,6 +87,9 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                       t.identifier("React"),
                       t.identifier("FC"),
                     ),
+                    head.props
+                    ? t.tsTypeParameterInstantiation([head.props.node])
+                    : null
                   ),
                 ),
               )

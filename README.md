@@ -68,7 +68,7 @@ export const C = props => {
   - [ ] Support class expressions
 - [ ] TypeScript support
   - [x] Add `React.FC` annotation
-  - [ ] Transform `P` type argument
+  - [x] Transform `P` type argument
   - [ ] Transform `S` type argument
   - [ ] Transform generic components
 - [ ] Support for `this.props`

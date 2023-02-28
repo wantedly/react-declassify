@@ -36,20 +36,45 @@ describe("react-declassify", () => {
     expect(transform(input)).toBe(output);
   });
 
-  it("generates React.FC", () => {
-    const input = dedent`\
-      class C extends React.Component {
-        render() {
-          return <div>Hello, world!</div>;
+  describe("TypeScript support", () => {
+    it("generates React.FC", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            return <div>Hello, world!</div>;
+          }
         }
-      }
-    `;
-    const output = dedent`\
-      const C: React.FC = () => {
-        return <div>Hello, world!</div>;
-      };
-    `;
-    expect(transform(input, { ts: true })).toBe(output);
+      `;
+      const output = dedent`\
+        const C: React.FC = () => {
+          return <div>Hello, world!</div>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
+    it("transforms first type argument", () => {
+      const input = dedent`\
+        type Props = {
+          text: string;
+        };
+        class C extends React.Component<Props> {
+          render() {
+            return <div>Hello, {this.props.text}!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        type Props = {
+          text: string;
+        };
+
+        const C: React.FC<Props> = props => {
+          return <div>Hello, {props.text}!</div>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
   });
 
   it("doesn't transform empty Component class", () => {
