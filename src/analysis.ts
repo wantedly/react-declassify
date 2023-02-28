@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, ImportDefaultSpecifier, ImportNamespaceSpecifier, ImportSpecifier, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -43,6 +43,7 @@ const SPECIAL_STATIC_NAMES = new Set<string>([
 ]);
 
 export type ComponentHead = {
+  superClassRef: RefInfo;
   props: NodePath<TSType> | undefined;
 };
 
@@ -64,13 +65,21 @@ export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | u
         props = params[0];
       }
     }
-    return { props };
+    return { superClassRef, props };
   }
 }
 
 export type RefInfo = {
   type: "import";
+  kind: "named";
   source: string;
+  specPath: NodePath<ImportSpecifier | ImportDefaultSpecifier>;
+  name: string;
+} | {
+  type: "import";
+  kind: "ns";
+  source: string;
+  specPath: NodePath<ImportSpecifier | ImportDefaultSpecifier | ImportNamespaceSpecifier>;
   name: string;
 } | {
   type: "global";
@@ -88,13 +97,17 @@ function analyzeRef(path: NodePath<Expression>): RefInfo | undefined {
     if (decl.isImportSpecifier()) {
       return {
         type: "import",
+        kind: "named",
         source: (decl.parentPath as NodePath<ImportDeclaration>).node.source.value,
+        specPath: decl,
         name: importName(decl.node.imported),
       };
     } else if (decl.isImportDefaultSpecifier()) {
       return {
         type: "import",
+        kind: "named",
         source: (decl.parentPath as NodePath<ImportDeclaration>).node.source.value,
+        specPath: decl,
         name: "default",
       };
     }
@@ -120,13 +133,20 @@ function analyzeRef(path: NodePath<Expression>): RefInfo | undefined {
     if (decl.isImportNamespaceSpecifier()) {
       return {
         type: "import",
+        kind: "ns",
         source: (decl.parentPath as NodePath<ImportDeclaration>).node.source.value,
+        specPath: decl,
         name,
       };
-    } else if (decl.isImportDefaultSpecifier()) {
+    } else if (
+      decl.isImportDefaultSpecifier()
+      || (decl.isImportSpecifier() && importName(decl.node.imported) === "default")
+    ) {
       return {
         type: "import",
+        kind: "ns",
         source: (decl.parentPath as NodePath<ImportDeclaration>).node.source.value,
+        specPath: decl,
         name,
       };
     }

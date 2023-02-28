@@ -1,7 +1,7 @@
-import type { Identifier, Pattern, RestElement, Statement } from "@babel/types";
-import type { PluginObj, PluginPass } from "@babel/core";
-import { assignTypeAnnotation, isTS } from "./utils.js";
-import { AnalysisError, analyzeBody, analyzeHead, needsProps } from "./analysis.js";
+import type { Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName } from "@babel/types";
+import type { NodePath, PluginObj, PluginPass } from "@babel/core";
+import { assignTypeAnnotation, importName, isTS } from "./utils.js";
+import { AnalysisError, analyzeBody, analyzeHead, needsProps, RefInfo } from "./analysis.js";
 
 type Options = {};
 
@@ -83,10 +83,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                 t.cloneNode(path.node.id),
                 t.tsTypeAnnotation(
                   t.tsTypeReference(
-                    t.tsQualifiedName(
-                      t.identifier("React"),
-                      t.identifier("FC"),
-                    ),
+                    toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
                     head.props
                     ? t.tsTypeParameterInstantiation([head.props.node])
                     : null
@@ -110,6 +107,55 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
       },
     },
   };
+}
+
+function toTSEntity(
+  expr: Expression,
+  babel: typeof import("@babel/core"),
+): TSEntityName {
+  const { types: t } = babel;
+  if (expr.type === "MemberExpression" && !expr.computed && expr.property.type === "Identifier") {
+    return t.tsQualifiedName(toTSEntity(expr.object, babel), t.cloneNode(expr.property));
+  } else if (expr.type === "Identifier") {
+    return t.cloneNode(expr);
+  }
+  throw new Error(`Cannot convert to TSEntityName: ${expr.type}`);
+}
+
+function getReactImport(
+  name: string,
+  babel: typeof import("@babel/core"),
+  superClassRef: RefInfo
+): MemberExpression | Identifier {
+  const { types: t } = babel;
+  if (superClassRef.type === "global") {
+    return t.memberExpression(
+      t.identifier(superClassRef.globalName),
+      t.identifier(name),
+    );
+  }
+  if (superClassRef.kind === "ns") {
+    return t.memberExpression(
+      t.identifier(superClassRef.specPath.node.local.name),
+      t.identifier(name),
+    );
+  }
+  const decl = superClassRef.specPath.parentPath as NodePath<ImportDeclaration>;
+  for (const spec of decl.get("specifiers")) {
+    if (spec.isImportSpecifier() && importName(spec.node.imported) === name) {
+      return t.cloneNode(spec.node.local);
+    }
+  }
+  // No existing decl
+  const newName = decl.scope.getBinding(name) ? decl.scope.generateUid(name) : name;
+  const local = t.identifier(newName);
+  decl.get("specifiers")[decl.node.specifiers.length - 1]!.insertAfter(
+    t.importSpecifier(
+      local,
+      name === newName ? local : t.identifier(newName)
+    )
+  );
+  return t.identifier(newName);
 }
 
 /**

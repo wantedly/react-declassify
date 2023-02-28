@@ -53,6 +53,25 @@ describe("react-declassify", () => {
       expect(transform(input, { ts: true })).toBe(output);
     });
 
+    it("generates FC", () => {
+      const input = dedent`\
+        import { Component } from "react";
+        class C extends Component {
+          render() {
+            return <div>Hello, world!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        import { Component, FC } from "react";
+
+        const C: FC = () => {
+          return <div>Hello, world!</div>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
     it("transforms first type argument", () => {
       const input = dedent`\
         type Props = {
