@@ -40,6 +40,17 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (tr.kind === "props") {
               // this.props -> props
               tr.path.replaceWith(tr.path.node.property);
+            } else if (tr.kind === "state") {
+              // this.state.foo -> foo
+              tr.path.replaceWith(t.identifier(tr.field.localName));
+            } else if (tr.kind === "setState") {
+              // this.setState({ foo: 1 }) -> setFoo(1)
+              tr.path.replaceWith(
+                t.callExpression(
+                  t.identifier(tr.field.localSetterName),
+                  [tr.rhs.node]
+                )
+              );
             } else if (tr.kind === "userDefined") {
               // this.foo -> foo
               tr.path.replaceWith(tr.path.node.property);
@@ -64,6 +75,21 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                 t.memberExpression(t.thisExpression(), t.identifier("props")),
               ),
             ]));
+          }
+          for (const field of body.state.values()) {
+            // State declarations
+            preamble.push(t.variableDeclaration("const", [
+              t.variableDeclarator(
+                t.arrayPattern([
+                  t.identifier(field.localName),
+                  t.identifier(field.localSetterName),
+                ]),
+                t.callExpression(
+                  getReactImport("useState", babel, head.superClassRef),
+                  field.init ? [field.init.node] : []
+                )
+              )
+            ]))
           }
           for (const [, mem] of body.members.entries()) {
             // Method definitions.

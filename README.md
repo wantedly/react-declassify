@@ -86,8 +86,9 @@ export const C = props => {
   - [ ] Skip method-binding expressions (e.g. `onClick={this.onClick.bind(this)}`)
   - [ ] Skip method-binding statements (e.g. `this.onClick = this.onClick.bind(this)`)
 - [ ] Support for `this.state`
-  - [ ] Decompose `this.state` into `useState` variables
-  - [ ] Rename states if necessary
+  - [x] Decompose `this.state` into `useState` variables
+  - [x] Rename states if necessary
+  - [ ] Support updating multiple states at once
   - [ ] Support functional updates
   - [ ] Support lazy initialization
 - [ ] Support for refs

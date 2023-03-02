@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, ImportDefaultSpecifier, ImportNamespaceSpecifier, ImportSpecifier, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
+import type { CallExpression, ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, ImportDefaultSpecifier, ImportNamespaceSpecifier, ImportSpecifier, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -159,6 +159,7 @@ function isReactRef(r: RefInfo): boolean {
 
 export type ComponentBody = {
   render: RenderAnalysis;
+  state: Map<string, StateField>;
   members: Map<string, MethodAnalysis>;
   thisRefs: ThisRef[];
   propVars: PropVar[];
@@ -166,9 +167,16 @@ export type ComponentBody = {
   propBinders: PropBinder[];
 };
 
+export type StateField = {
+  init?: NodePath<Expression>;
+  localName: string;
+  localSetterName: string;
+};
+
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const locals = analyzeOuterCapturings(path);
-  const thisRefs = analyzeThisRefs(path);
+  const state = new Map<string, StateField>();
+  const thisRefs = analyzeThisRefs(path, state, babel, locals);
   const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
@@ -185,9 +193,33 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       } else {
         throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
+    } else if (itemPath.isClassProperty()) {
+      const name = memberName(itemPath.node);
+      if (name === "state") {
+        const initPath = itemPath.get("value");
+        if (!initPath.isObjectExpression()) {
+          throw new AnalysisError("Non-analyzable state initializer");
+        }
+        for (const fieldPath of initPath.get("properties")) {
+          if (!fieldPath.isObjectProperty()) {
+            throw new AnalysisError("Non-analyzable state initializer");
+          }
+          const fieldName = memberName(fieldPath.node);
+          if (fieldName == null) {
+            throw new AnalysisError("Non-analyzable state initializer");
+          }
+          const fieldInitPath = fieldPath.get("value");
+          if (!fieldInitPath.isExpression()) {
+            throw new AnalysisError("Non-analyzable state initializer");
+          }
+          const field = ensureState(state, fieldName, babel, locals);
+          field.init = fieldInitPath;
+        }
+      } else {
+        throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
+      }
     } else if (
-      itemPath.isClassProperty()
-      || itemPath.isClassPrivateMethod()
+      itemPath.isClassPrivateMethod()
       || itemPath.isClassPrivateProperty()
       || itemPath.isTSDeclareMethod()
     ) {
@@ -202,6 +234,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   }
   return {
     render,
+    state,
     members,
     thisRefs,
     propVars,
@@ -395,7 +428,7 @@ function analyzeProps(
   return { propVars, propVarNames, propBinders };
 }
 
-function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
+function analyzeThisRefs(path: NodePath<ClassDeclaration>, state: Map<string, StateField>, babel: typeof import("@babel/core"), locals: Set<string>): ThisRef[] {
   const thisRefs: ThisRef[] = [];
   for (const mem of path.get("body").get("body")) {
     if (mem.isClassMethod()) {
@@ -403,9 +436,9 @@ function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
         // TODO
       } else {
         for (const param of mem.get("params")) {
-          analyzeThisRefsIn(thisRefs, param);
+          analyzeThisRefsIn(thisRefs, param, state, babel, locals);
         }
-        analyzeThisRefsIn(thisRefs, mem.get("body"));
+        analyzeThisRefsIn(thisRefs, mem.get("body"), state, babel, locals);
       }
     } else if (mem.isClassProperty()) {
       if (mem.node.static) {
@@ -413,7 +446,7 @@ function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
       } else {
         const value = mem.get("value");
         if (value.isExpression()) {
-          analyzeThisRefsIn(thisRefs, value);
+          analyzeThisRefsIn(thisRefs, value, state, babel, locals);
         }
       }
     }
@@ -421,7 +454,7 @@ function analyzeThisRefs(path: NodePath<ClassDeclaration>): ThisRef[] {
   return thisRefs;
 }
 
-function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath) {
+function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath, state: Map<string, StateField>, babel: typeof import("@babel/core"), locals: Set<string>) {
   traverseThis(path, (path) => {
     const parentPath = path.parentPath;
     if (!parentPath.isMemberExpression()) {
@@ -433,6 +466,54 @@ function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath) {
         kind: "props",
         path: parentPath,
       });
+    } else if (name === "state") {
+      const gpPath = parentPath.parentPath;
+      if (!gpPath.isMemberExpression()) {
+        throw new AnalysisError(`Stray this.state`);
+      }
+      const stateName = memberRefName(gpPath.node);
+      if (stateName == null) {
+        throw new AnalysisError(`Non-analyzable state name`);
+      }
+      const field = ensureState(state, stateName, babel, locals);
+      thisRefs.push({
+        kind: "state",
+        path: gpPath,
+        field,
+      });
+    } else if (name === "setState") {
+      const gpPath = parentPath.parentPath;
+      if (!gpPath.isCallExpression()) {
+        throw new AnalysisError(`Stray this.setState`);
+      }
+      const args = gpPath.get("arguments");
+      if (args.length !== 1) {
+        throw new AnalysisError(`Non-analyzable setState`);
+      }
+      const arg0 = args[0]!;
+      if (arg0.isObjectExpression()) {
+        const props = arg0.get("properties");
+        if (props.length !== 1) {
+          throw new AnalysisError(`Multiple assignments in setState is not yet supported`);
+        }
+        const prop0 = props[0]!;
+        if (!prop0.isObjectProperty()) {
+          throw new AnalysisError(`Non-analyzable setState`);
+        }
+        const setStateName = memberName(prop0.node);
+        if (setStateName == null) {
+          throw new AnalysisError(`Non-analyzable setState name`);
+        }
+        const field = ensureState(state, setStateName, babel, locals);
+        thisRefs.push({
+          kind: "setState",
+          path: gpPath,
+          field,
+          rhs: prop0.get("value") as NodePath<Expression>,
+        });
+      } else {
+        throw new AnalysisError(`Non-analyzable setState`);
+      }
     } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
       thisRefs.push({
         kind: "userDefined",
@@ -470,6 +551,15 @@ export type ThisRef = {
   kind: "props";
   path: NodePath<MemberExpression>;
 } | {
+  kind: "state",
+  path: NodePath<MemberExpression>;
+  field: StateField,
+} | {
+  kind: "setState",
+  path: NodePath<CallExpression>;
+  field: StateField,
+  rhs: NodePath<Expression>,
+} | {
   kind: "userDefined";
   path: NodePath<MemberExpression>;
   name: string;
@@ -497,6 +587,15 @@ function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<stri
     }
   });
   return capturings;
+}
+
+function ensureState(state: Map<string, StateField>, name: string, babel: typeof import("@babel/core"), locals: Set<string>): StateField {
+  if (!state.has(name)) {
+    const localName = newLocal(name, babel, locals);
+    const localSetterName = newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, babel, locals);
+    state.set(name, { localName, localSetterName });
+  }
+  return state.get(name)!;
 }
 
 function newLocal(baseName: string, babel: typeof import("@babel/core"), locals: Set<string>): string {

@@ -413,6 +413,30 @@ describe("react-declassify", () => {
     });
   });
 
+  describe("State transformation", () => {
+    it("transforms simple states", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          state = {
+            foo: 1,
+            bar: 2,
+          };
+          render() {
+            return <button onClick={() => this.setState({ bar: 3 })}>{this.state.foo}</button>;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const [bar, setBar] = React.useState(2);
+          const [foo, setFoo] = React.useState(1);
+          return <button onClick={() => setBar(3)}>{foo}</button>;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   it("transforms props", () => {
     const input = dedent`\
       class C extends React.Component {
