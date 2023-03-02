@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.1
+
 - Added
   - Transform `P` type argument
   - Transform `setState` (simple case)
