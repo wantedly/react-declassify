@@ -1,7 +1,7 @@
-import type { Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName } from "@babel/types";
+import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignTypeAnnotation, importName, isTS } from "./utils.js";
-import { AnalysisError, analyzeBody, analyzeHead, needsProps, RefInfo } from "./analysis.js";
+import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, RefInfo } from "./analysis.js";
 
 type Options = {};
 
@@ -18,108 +18,16 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         }
         try {
           const body = analyzeBody(path, babel);
-          for (const pv of body.propVars) {
-            if (pv.oldName !== pv.newName) {
-              // Rename variables that props are bound to.
-              // E.g. `foo` as in `const { foo } = this.props`.
-              // This is to ensure we hoist them correctly.
-              pv.scope.rename(pv.oldName, pv.newName);
-            }
-          }
-          for (const pb of body.propBinders) {
-            // Remove assignments of this.props.
-            // We re-add them later to achieve hoisting.
-            pb.path.remove();
-          }
-          for (const ren of body.render.renames) {
-            // Rename local variables in the render method
-            // to avoid unintentional variable capturing.
-            ren.scope.rename(ren.oldName, ren.newName);
-          }
-          for (const tr of body.thisRefs) {
-            if (tr.kind === "props") {
-              // this.props -> props
-              tr.path.replaceWith(tr.path.node.property);
-            } else if (tr.kind === "state") {
-              // this.state.foo -> foo
-              tr.path.replaceWith(t.identifier(tr.field.localName));
-            } else if (tr.kind === "setState") {
-              // this.setState({ foo: 1 }) -> setFoo(1)
-              tr.path.replaceWith(
-                t.callExpression(
-                  t.identifier(tr.field.localSetterName),
-                  [tr.rhs.node]
-                )
-              );
-            } else if (tr.kind === "userDefined") {
-              // this.foo -> foo
-              tr.path.replaceWith(tr.path.node.property);
-            }
-          }
-          // Preamble is a set of statements to be added before the original render body.
-          const preamble: Statement[] = [];
-          if (body.propVarNames.size > 0) {
-            // Expand this.props into variables.
-            // E.g. const { foo, bar } = props;
-            preamble.push(t.variableDeclaration("const", [
-              t.variableDeclarator(
-                t.objectPattern(Array.from(body.propVarNames.entries()).map(([propName, localName]) =>
-                  t.objectProperty(
-                    t.identifier(propName),
-                    t.identifier(localName),
-                    false,
-                    propName === localName,
-                  ),
-                )),
-                t.identifier("props"),
-              ),
-            ]));
-          }
-          for (const field of body.state.values()) {
-            // State declarations
-            preamble.push(t.variableDeclaration("const", [
-              t.variableDeclarator(
-                t.arrayPattern([
-                  t.identifier(field.localName),
-                  t.identifier(field.localSetterName),
-                ]),
-                t.callExpression(
-                  getReactImport("useState", babel, head.superClassRef),
-                  field.init ? [field.init.node] : []
-                )
-              )
-            ]))
-          }
-          for (const [, mem] of body.members.entries()) {
-            // Method definitions.
-            const methNode = mem.path.node;
-            preamble.push(t.functionDeclaration(
-              methNode.key as Identifier,
-              methNode.params as (Identifier | RestElement | Pattern)[],
-              methNode.body,
-            ));
-          }
-          const bodyNode = body.render.path.node.body;
-          bodyNode.body.splice(0, 0, ...preamble);
+          const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
           path.replaceWith(t.variableDeclaration("const", [
             t.variableDeclarator(
               ts
               ? assignTypeAnnotation(
                 t.cloneNode(path.node.id),
-                t.tsTypeAnnotation(
-                  t.tsTypeReference(
-                    toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
-                    head.props
-                    ? t.tsTypeParameterInstantiation([head.props.node])
-                    : null
-                  ),
-                ),
+                t.tsTypeAnnotation(typeNode!),
               )
               : t.cloneNode(path.node.id),
-              t.arrowFunctionExpression(
-                needsProps(body) ? [t.identifier("props")] : [],
-                bodyNode
-              ),
+              funcNode,
             )
           ]));
         } catch (e) {
@@ -131,6 +39,114 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         }
       },
     },
+  };
+}
+
+type TransformResult = {
+  funcNode: ArrowFunctionExpression;
+  typeNode?: TSType | undefined;
+};
+
+function transformClass(head: ComponentHead, body: ComponentBody, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
+  const { types: t } = babel;
+  const { ts } = options;
+
+  for (const pv of body.propVars) {
+    if (pv.oldName !== pv.newName) {
+      // Rename variables that props are bound to.
+      // E.g. `foo` as in `const { foo } = this.props`.
+      // This is to ensure we hoist them correctly.
+      pv.scope.rename(pv.oldName, pv.newName);
+    }
+  }
+  for (const pb of body.propBinders) {
+    // Remove assignments of this.props.
+    // We re-add them later to achieve hoisting.
+    pb.path.remove();
+  }
+  for (const ren of body.render.renames) {
+    // Rename local variables in the render method
+    // to avoid unintentional variable capturing.
+    ren.scope.rename(ren.oldName, ren.newName);
+  }
+  for (const tr of body.thisRefs) {
+    if (tr.kind === "props") {
+      // this.props -> props
+      tr.path.replaceWith(tr.path.node.property);
+    } else if (tr.kind === "state") {
+      // this.state.foo -> foo
+      tr.path.replaceWith(t.identifier(tr.field.localName));
+    } else if (tr.kind === "setState") {
+      // this.setState({ foo: 1 }) -> setFoo(1)
+      tr.path.replaceWith(
+        t.callExpression(
+          t.identifier(tr.field.localSetterName),
+          [tr.rhs.node]
+        )
+      );
+    } else if (tr.kind === "userDefined") {
+      // this.foo -> foo
+      tr.path.replaceWith(tr.path.node.property);
+    }
+  }
+  // Preamble is a set of statements to be added before the original render body.
+  const preamble: Statement[] = [];
+  if (body.propVarNames.size > 0) {
+    // Expand this.props into variables.
+    // E.g. const { foo, bar } = props;
+    preamble.push(t.variableDeclaration("const", [
+      t.variableDeclarator(
+        t.objectPattern(Array.from(body.propVarNames.entries()).map(([propName, localName]) =>
+          t.objectProperty(
+            t.identifier(propName),
+            t.identifier(localName),
+            false,
+            propName === localName,
+          ),
+        )),
+        t.identifier("props"),
+      ),
+    ]));
+  }
+  for (const field of body.state.values()) {
+    // State declarations
+    preamble.push(t.variableDeclaration("const", [
+      t.variableDeclarator(
+        t.arrayPattern([
+          t.identifier(field.localName),
+          t.identifier(field.localSetterName),
+        ]),
+        t.callExpression(
+          getReactImport("useState", babel, head.superClassRef),
+          field.init ? [field.init.node] : []
+        )
+      )
+    ]))
+  }
+  for (const [, mem] of body.members.entries()) {
+    // Method definitions.
+    const methNode = mem.path.node;
+    preamble.push(t.functionDeclaration(
+      methNode.key as Identifier,
+      methNode.params as (Identifier | RestElement | Pattern)[],
+      methNode.body,
+    ));
+  }
+  const bodyNode = body.render.path.node.body;
+  bodyNode.body.splice(0, 0, ...preamble);
+  return {
+    funcNode: t.arrowFunctionExpression(
+      needsProps(body) ? [t.identifier("props")] : [],
+      bodyNode
+    ),
+    typeNode: ts
+      ? t.tsTypeReference(
+        toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
+        head.props
+        ? t.tsTypeParameterInstantiation([head.props.node])
+        : null
+      )
+      : undefined,
   };
 }
 
