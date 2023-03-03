@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Fixed
+  - Fix emission of hoisted props
+
 ## 0.1.1
 
 - Added

@@ -400,7 +400,7 @@ describe("react-declassify", () => {
             bar,
             baz,
             foo
-          } = this.props;
+          } = props;
 
           function meth() {
             return foo + bar;
@@ -478,7 +478,7 @@ describe("react-declassify", () => {
           text,
           color,
           handleClick
-        } = this.props;
+        } = props;
 
         function onClick() {
           alert(\`\${text} was clicked!\`);

@@ -45,7 +45,7 @@ export const C = props => {
     text,
     color,
     handleClick
-  } = this.props;
+  } = props;
 
   function onClick() {
     alert(`${text} was clicked!`);

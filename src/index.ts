@@ -60,7 +60,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           const preamble: Statement[] = [];
           if (body.propVarNames.size > 0) {
             // Expand this.props into variables.
-            // E.g. const { foo, bar } = this.props;
+            // E.g. const { foo, bar } = props;
             preamble.push(t.variableDeclaration("const", [
               t.variableDeclarator(
                 t.objectPattern(Array.from(body.propVarNames.entries()).map(([propName, localName]) =>
@@ -71,8 +71,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                     propName === localName,
                   ),
                 )),
-                // this.props
-                t.memberExpression(t.thisExpression(), t.identifier("props")),
+                t.identifier("props"),
               ),
             ]));
           }
