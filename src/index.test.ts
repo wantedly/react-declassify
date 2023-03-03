@@ -297,6 +297,58 @@ describe("react-declassify", () => {
     });
   });
 
+  describe("Class forms", () => {
+    it("transforms a simple class declaration", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            return <div>Hello, world!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          return <div>Hello, world!</div>;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("transforms a class declaration within export default (named case)", () => {
+      const input = dedent`\
+        export default class C extends React.Component {
+          render() {
+            return <div>Hello, world!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          return <div>Hello, world!</div>;
+        };
+
+        export default C;
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("transforms a class declaration within export default (anonymous case)", () => {
+      const input = dedent`\
+        export default class extends React.Component {
+          render() {
+            return <div>Hello, world!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        export default () => {
+          return <div>Hello, world!</div>;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   describe("Render function transformation", () => {
     it("Renames local variables to avoid capturing", () => {
       const input = dedent`\

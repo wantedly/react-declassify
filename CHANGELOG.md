@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added
+  - Add support for `export default class` declarations
 - Fixed
   - Fix emission of hoisted props
 

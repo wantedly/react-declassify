@@ -64,7 +64,7 @@ export const C = props => {
   - [ ] Support `React.PureComponent`
 - [ ] Class node type
   - [x] Support class declarations
-  - [ ] Support `export default class` declarations
+  - [x] Support `export default class` declarations
   - [ ] Support class expressions
 - [ ] TypeScript support
   - [x] Add `React.FC` annotation

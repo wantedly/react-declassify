@@ -16,26 +16,60 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         if (!head) {
           return;
         }
-        try {
-          const body = analyzeBody(path, babel);
-          const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
-          path.replaceWith(t.variableDeclaration("const", [
-            t.variableDeclarator(
-              ts
-              ? assignTypeAnnotation(
-                t.cloneNode(path.node.id),
-                t.tsTypeAnnotation(typeNode!),
-              )
-              : t.cloneNode(path.node.id),
-              funcNode,
-            )
-          ]));
-        } catch (e) {
-          if (!(e instanceof AnalysisError)) {
-            throw e;
+        if (path.parentPath.isExportDefaultDeclaration()) {
+          const declPath = path.parentPath;
+          try {
+            const body = analyzeBody(path, babel);
+            const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
+            if (path.node.id) {
+              declPath.replaceWithMultiple([
+                t.variableDeclaration("const", [
+                  t.variableDeclarator(
+                    ts
+                    ? assignTypeAnnotation(
+                      t.cloneNode(path.node.id),
+                      t.tsTypeAnnotation(typeNode!),
+                    )
+                    : t.cloneNode(path.node.id),
+                    funcNode,
+                  )
+                ]),
+                t.exportDefaultDeclaration(
+                  t.cloneNode(path.node.id)
+                )
+              ]);
+            } else {
+              path.replaceWith(funcNode);
+            }
+          } catch (e) {
+            if (!(e instanceof AnalysisError)) {
+              throw e;
+            }
+            t.addComment(declPath.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
+            refreshComments(declPath.node);
           }
-          t.addComment(path.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
-          refreshComments(path.node);
+        } else {
+          try {
+            const body = analyzeBody(path, babel);
+            const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
+            path.replaceWith(t.variableDeclaration("const", [
+              t.variableDeclarator(
+                ts
+                ? assignTypeAnnotation(
+                  t.cloneNode(path.node.id),
+                  t.tsTypeAnnotation(typeNode!),
+                )
+                : t.cloneNode(path.node.id),
+                funcNode,
+              )
+            ]));
+          } catch (e) {
+            if (!(e instanceof AnalysisError)) {
+              throw e;
+            }
+            t.addComment(path.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
+            refreshComments(path.node);
+          }
         }
       },
     },
