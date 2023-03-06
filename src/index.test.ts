@@ -406,6 +406,32 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("transforms functional fields as functions", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            this.foo(100);
+            return null;
+          }
+
+          foo = (x) => {
+            return x + 42;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          function foo(x) {
+            return x + 42;
+          }
+
+          foo(100);
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
     it("transforms this.props in methods", () => {
       const input = dedent`\
         class C extends React.Component {

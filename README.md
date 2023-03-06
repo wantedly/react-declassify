@@ -79,7 +79,7 @@ export const C = props => {
   - [ ] transform `defaultProps`
 - [ ] Support for user-defined methods
   - [x] Transform methods to `function`s
-  - [ ] Transform class fields initialized as functions to `function`s
+  - [x] Transform class fields initialized as functions to `function`s
   - [ ] Use `useCallback` if deemed necessary
   - [ ] Auto-expand direct callback call (like `this.props.onClick()`) to indirect call
   - [ ] Rename methods if necessary

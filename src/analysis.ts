@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { CallExpression, ClassDeclaration, ClassMethod, Expression, Identifier, ImportDeclaration, ImportDefaultSpecifier, ImportNamespaceSpecifier, ImportSpecifier, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
+import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, Expression, FunctionExpression, Identifier, ImportDeclaration, ImportDefaultSpecifier, ImportNamespaceSpecifier, ImportSpecifier, JSXIdentifier, MemberExpression, ThisExpression, TSType } from "@babel/types";
 import { importName, memberName, memberRefName } from "./utils.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -215,6 +215,19 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
           const field = ensureState(state, fieldName, babel, locals);
           field.init = fieldInitPath;
         }
+      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
+        const initPath = itemPath.get("value");
+        if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
+          if (members.has(name)) {
+            throw new AnalysisError(`Duplicate member: ${name}`);
+          }
+          members.set(name, analyzeFuncDef(initPath));
+        } else if (initPath.node) {
+          // Empty declaration; ignore it for now
+          // We may want to get types from it
+        } else {
+          throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
+        }
       } else {
         throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
@@ -279,11 +292,19 @@ function analyzeRender(
 }
 
 export type MethodAnalysis = {
+  type: "method";
   path: NodePath<ClassMethod>;
+} | {
+  type: "func_def";
+  initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
 };
 
 function analyzeMethod(path: NodePath<ClassMethod>): MethodAnalysis {
-  return { path };
+  return { type: "method", path };
+}
+
+function analyzeFuncDef(initPath: NodePath<FunctionExpression | ArrowFunctionExpression>): MethodAnalysis {
+  return { type: "func_def", initPath };
 }
 
 export type PropVar = {

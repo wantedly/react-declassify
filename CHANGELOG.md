@@ -2,6 +2,7 @@
 
 - Added
   - Add support for `export default class` declarations
+  - Add support for class fields initialized as functions
 - Fixed
   - Fix emission of hoisted props
 

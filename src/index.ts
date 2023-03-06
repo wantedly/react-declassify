@@ -157,14 +157,35 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       )
     ]))
   }
-  for (const [, mem] of body.members.entries()) {
+  for (const [name, mem] of body.members.entries()) {
     // Method definitions.
-    const methNode = mem.path.node;
-    preamble.push(t.functionDeclaration(
-      methNode.key as Identifier,
-      methNode.params as (Identifier | RestElement | Pattern)[],
-      methNode.body,
-    ));
+    if (mem.type === "method") {
+      const methNode = mem.path.node;
+      preamble.push(t.functionDeclaration(
+        methNode.key as Identifier,
+        methNode.params as (Identifier | RestElement | Pattern)[],
+        methNode.body,
+      ));
+    } else {
+      const methNode = mem.initPath.node;
+      if (methNode.type === "ArrowFunctionExpression") {
+        preamble.push(t.functionDeclaration(
+          t.identifier(name),
+          methNode.params,
+          methNode.body.type === "BlockStatement"
+            ? methNode.body
+            : t.blockStatement([
+              t.returnStatement(methNode.body)
+            ]),
+        ));
+      } else {
+        preamble.push(t.functionDeclaration(
+          t.identifier(name),
+          methNode.params,
+          methNode.body,
+        ));
+      }
+    }
   }
   const bodyNode = body.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
