@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Added
+  - Add support for `this.state` initialization in constructor
+
 ## 0.1.2
 
 - Added

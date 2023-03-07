@@ -77,6 +77,9 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   for (const [name, fieldSites] of sites.entries()) {
+    if (fieldSites.length === 0) {
+      continue;
+    }
     if (name === "render") {
       if (fieldSites.some((site) => site.type === "expr")) {
         throw new AnalysisError(`do not use this.render`);
@@ -92,10 +95,14 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     } else if (name === "state") {
       const init = fieldSites.find((site) => site.hasInit);
       if (init) {
-        if (!init.path.isClassProperty()) {
+        let initPath: NodePath<Expression | null | undefined>;
+        if (init.path.isClassProperty()) {
+          initPath = init.path.get("value");
+        } else if (init.path.isAssignmentExpression()) {
+          initPath = init.path.get("right");
+        } else {
           throw new AnalysisError("Non-analyzable state initializer");
         }
-        const initPath = init.path.get("value");
         if (!initPath.isObjectExpression()) {
           throw new AnalysisError("Non-analyzable state initializer");
         }
@@ -121,9 +128,13 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       if (init) {
         if (init.path.isClassMethod() || init.path.isClassPrivateMethod()) {
           members.set(name, analyzeMethod(init.path));
-        } else if (init.path.isClassProperty() || init.path.isClassPrivateProperty()) {
-          const path_: NodePath<ClassProperty | ClassPrivateProperty> = init.path;
-          const initPath = path_.get("value");
+        } else if (init.path.isClassProperty() || init.path.isClassPrivateProperty() || init.path.isAssignmentExpression()) {
+          const initPath =
+            init.path.isAssignmentExpression()
+            ? init.path.get("right")
+            : init.path.isClassPrivateProperty()
+            ? init.path.get("value")
+            : init.path.get("value");
           if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
             members.set(name, analyzeFuncDef(initPath));
           } else {
@@ -385,7 +396,8 @@ function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath, state: Map<strin
     } else if (name === "state") {
       const gpPath = parentPath.parentPath;
       if (!gpPath.isMemberExpression()) {
-        throw new AnalysisError(`Stray this.state`);
+        // throw new AnalysisError(`Stray this.state`);
+        return;
       }
       const stateName = memberRefName(gpPath.node);
       if (stateName == null) {

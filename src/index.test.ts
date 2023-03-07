@@ -531,6 +531,33 @@ describe("react-declassify", () => {
     expect(transform(input)).toBe(output);
   });
 
+  describe("constructor support", () => {
+    it("transforms state in constructor", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+            this.state = {
+              foo: 1,
+              bar: 2,
+            };
+          }
+          render() {
+            return <button onClick={() => this.setState({ bar: 3 })}>{this.state.foo}</button>;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const [bar, setBar] = React.useState(2);
+          const [foo, setFoo] = React.useState(1);
+          return <button onClick={() => setBar(3)}>{foo}</button>;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   test("readme example 1", () => {
     const input = dedent`\
       import React from "react";

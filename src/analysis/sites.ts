@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import type { ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ThisExpression, TSDeclareMethod } from "@babel/types";
+import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, ThisExpression, TSDeclareMethod } from "@babel/types";
 import { isClassAccessorProperty, isStaticBlock, memberName, memberRefName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
@@ -7,7 +7,7 @@ export type ThisFields = Map<string, ThisFieldSite[]>;
 
 export type ThisFieldSite = {
   type: "class_field";
-  path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod>;
+  path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
   hasType: boolean;
   hasInit: boolean;
   hasWrite: undefined;
@@ -23,6 +23,7 @@ export type ThisFieldSite = {
 
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
   const fields = new Map<string, ThisFieldSite[]>();
+  let constructor: NodePath<ClassMethod> | undefined = undefined;
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
     if (
@@ -67,7 +68,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
         } else if (kind === "constructor") {
-          throw new AnalysisError(`Not implemented yet: constructor`);
+          constructor = itemPath as NodePath<ClassMethod>;
         } else {
           throw new AnalysisError(`Not implemented yet: ${kind}`);
         }
@@ -80,6 +81,76 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       // Ignore
     } else {
       throw new AnalysisError(`Unknown class element`);
+    }
+  }
+
+  // 1st pass additional work: field initialization in constructor
+  if (constructor) {
+    if (constructor.node.params.length > 1) {
+      throw new AnalysisError(`Constructor has too many parameters`);
+    } else if (constructor.node.params.length < 1) {
+      throw new AnalysisError(`Constructor has too few parameters`);
+    }
+    const param = constructor.node.params[0]!;
+    if (param.type !== "Identifier") {
+      throw new AnalysisError(`Invalid constructor parameters`);
+    }
+
+    const stmts = constructor.get("body").get("body");
+
+    // Check super() call
+    const superCallIndex = stmts.findIndex((stmt) =>
+      stmt.node.type === "ExpressionStatement"
+      && stmt.node.expression.type === "CallExpression"
+      && stmt.node.expression.callee.type === "Super"
+    );
+    if (superCallIndex === -1) {
+      throw new AnalysisError(`No super call`);
+    } else if (superCallIndex > 0) {
+      throw new AnalysisError(`No immediate super call`);
+    }
+    const superCall = stmts[superCallIndex]!;
+    const superCallArgs =
+      ((superCall.node as ExpressionStatement).expression as CallExpression).arguments;
+    if (superCallArgs.length > 1) {
+      throw new AnalysisError(`Too many arguments for super()`);
+    } else if (superCallArgs.length < 1) {
+      throw new AnalysisError(`Too few arguments for super()`);
+    }
+    const superCallArg = superCallArgs[0]!;
+    if (superCallArg.type !== "Identifier" || superCallArg.name !== param.name) {
+      throw new AnalysisError(`Invalid argument for super()`);
+    }
+
+    const initStmts = stmts.slice(superCallIndex + 1);
+    for (const stmt of initStmts) {
+      if (!(
+        stmt.node.type === "ExpressionStatement"
+        && stmt.node.expression.type === "AssignmentExpression"
+        && stmt.node.expression.operator === "="
+        && stmt.node.expression.left.type === "MemberExpression"
+        && stmt.node.expression.left.object.type === "ThisExpression"
+      )) {
+        throw new AnalysisError(`Non-analyzable initialization in constructor`);
+      }
+      const name = memberRefName(stmt.node.expression.left);
+      if (name == null) {
+        throw new AnalysisError(`Non-analyzable initialization in constructor`);
+      }
+      // TODO: check for parameter/local variable reference
+
+      if (!fields.has(name)) {
+        fields.set(name, []);
+      }
+      const field = fields.get(name)!;
+      field.push({
+        type: "class_field",
+        path: (stmt as NodePath<ExpressionStatement>).get("expression") as NodePath<AssignmentExpression>,
+        hasType: false,
+        hasInit: true,
+        hasWrite: undefined,
+        hasSideEffect: estimateSideEffect(stmt.node.expression.right),
+      });
     }
   }
 
@@ -155,7 +226,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
         } else if (kind === "constructor") {
-          throw new AnalysisError(`Not implemented yet: constructor`);
+          // Skip
         } else {
           throw new AnalysisError(`Not implemented yet: ${kind}`);
         }
