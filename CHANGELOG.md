@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.2
+
 - Added
   - Add support for `export default class` declarations
   - Add support for class fields initialized as functions
