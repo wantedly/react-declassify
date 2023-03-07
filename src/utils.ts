@@ -1,5 +1,5 @@
-import type { PluginPass } from "@babel/core";
-import type { ArrayPattern, AssignmentPattern, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, ObjectMethod, ObjectPattern, ObjectProperty, RestElement, StringLiteral, TSDeclareMethod, TSTypeAnnotation } from "@babel/types";
+import type { NodePath, PluginPass } from "@babel/core";
+import type { ArrayPattern, AssignmentPattern, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, Node, ObjectMethod, ObjectPattern, ObjectProperty, RestElement, StaticBlock, StringLiteral, TSDeclareMethod, TSTypeAnnotation } from "@babel/types";
 
 export function memberName(member: ClassMethod | ClassPrivateMethod | ClassProperty | ClassPrivateProperty | ClassAccessorProperty | TSDeclareMethod | ObjectMethod | ObjectProperty): string | undefined {
   const computed = member.type === "ClassPrivateMethod" || member.type === "ClassPrivateProperty"
@@ -26,6 +26,14 @@ export function importName(name: Identifier | StringLiteral): string {
   } else {
     return name.name;
   }
+}
+
+export function isStaticBlock(path: NodePath): path is NodePath<StaticBlock> {
+  return path.node.type === "StaticBlock";
+}
+
+export function isClassAccessorProperty(path: NodePath): path is NodePath<ClassAccessorProperty> {
+  return path.node.type === "ClassAccessorProperty";
 }
 
 export function isTS(state: PluginPass): boolean {

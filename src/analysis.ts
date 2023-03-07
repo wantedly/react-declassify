@@ -1,7 +1,11 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
+import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
+import { AnalysisError } from "./analysis/error.js";
+import { analyzeThisFields } from "./analysis/sites.js";
 import { memberName, memberRefName } from "./utils.js";
+
+export { AnalysisError } from "./analysis/error.js";
 
 export type {
   ComponentHead,
@@ -65,29 +69,33 @@ export type StateField = {
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
+  const sites = analyzeThisFields(path);
   const locals = analyzeOuterCapturings(path);
   const state = new Map<string, StateField>();
   const thisRefs = analyzeThisRefs(path, state, babel, locals);
   const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
-  for (const itemPath of path.get("body").get("body")) {
-    if (itemPath.isClassMethod()) {
-      const name = memberName(itemPath.node);
-      if (name === "render") {
-        render = analyzeRender(itemPath, babel, locals, propVars);
-      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
-        if (members.has(name)) {
-          throw new AnalysisError(`Duplicate member: ${name}`);
-        }
-        members.set(name, analyzeMethod(itemPath));
-      } else {
-        throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
+  for (const [name, fieldSites] of sites.entries()) {
+    if (name === "render") {
+      if (fieldSites.some((site) => site.type === "expr")) {
+        throw new AnalysisError(`do not use this.render`);
       }
-    } else if (itemPath.isClassProperty()) {
-      const name = memberName(itemPath.node);
-      if (name === "state") {
-        const initPath = itemPath.get("value");
+      const init = fieldSites.find((site) => site.hasInit);
+      if (init) {
+        if (init.path.isClassMethod()) {
+          render = analyzeRender(init.path, babel, locals, propVars);
+        }
+      }
+    } else if (name === "props") {
+      // TODO: refactor the logic into here
+    } else if (name === "state") {
+      const init = fieldSites.find((site) => site.hasInit);
+      if (init) {
+        if (!init.path.isClassProperty()) {
+          throw new AnalysisError("Non-analyzable state initializer");
+        }
+        const initPath = init.path.get("value");
         if (!initPath.isObjectExpression()) {
           throw new AnalysisError("Non-analyzable state initializer");
         }
@@ -106,31 +114,27 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
           const field = ensureState(state, fieldName, babel, locals);
           field.init = fieldInitPath;
         }
-      } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
-        const initPath = itemPath.get("value");
-        if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
-          if (members.has(name)) {
-            throw new AnalysisError(`Duplicate member: ${name}`);
-          }
-          members.set(name, analyzeFuncDef(initPath));
-        } else if (initPath.node) {
-          // Empty declaration; ignore it for now
-          // We may want to get types from it
-        } else {
-          throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
-        }
-      } else {
-        throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
       }
-    } else if (
-      itemPath.isClassPrivateMethod()
-      || itemPath.isClassPrivateProperty()
-      || itemPath.isTSDeclareMethod()
-    ) {
-      const name = memberName(itemPath.node);
-      throw new AnalysisError(`Unrecognized class element: ${name ?? "<computed>"}`);
+    } else if (name === "setState") {
+    } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
+      const init = fieldSites.find((site) => site.hasInit);
+      if (init) {
+        if (init.path.isClassMethod() || init.path.isClassPrivateMethod()) {
+          members.set(name, analyzeMethod(init.path));
+        } else if (init.path.isClassProperty() || init.path.isClassPrivateProperty()) {
+          const path_: NodePath<ClassProperty | ClassPrivateProperty> = init.path;
+          const initPath = path_.get("value");
+          if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
+            members.set(name, analyzeFuncDef(initPath));
+          } else {
+            throw new AnalysisError(`Non-analyzable initialization of ${name}`);
+          }
+        } else {
+          throw new AnalysisError(`Non-analyzable initialization of ${name}`);
+        }
+      }
     } else {
-      throw new AnalysisError("Unrecognized class element");
+      throw new AnalysisError(`Cannot transform ${name}`);
     }
   }
   if (!render) {
@@ -184,13 +188,13 @@ function analyzeRender(
 
 export type MethodAnalysis = {
   type: "method";
-  path: NodePath<ClassMethod>;
+  path: NodePath<ClassMethod | ClassPrivateMethod>;
 } | {
   type: "func_def";
   initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
 };
 
-function analyzeMethod(path: NodePath<ClassMethod>): MethodAnalysis {
+function analyzeMethod(path: NodePath<ClassMethod | ClassPrivateMethod>): MethodAnalysis {
   return { type: "method", path };
 }
 
@@ -533,10 +537,4 @@ function newLocal(baseName: string, babel: typeof import("@babel/core"), locals:
 
 export function needsProps(body: ComponentBody): boolean {
   return body.thisRefs.some((r) => r.kind === "props");
-}
-
-export class AnalysisError extends Error {
-  static {
-    this.prototype.name = "AnalysisError";
-  }
 }
