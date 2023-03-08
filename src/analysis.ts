@@ -426,27 +426,6 @@ function analyzeProps(
   return { propVars, propVarNames, propBinders };
 }
 
-function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {
-  path.traverse({
-    ThisExpression: visit,
-    FunctionDeclaration(path) {
-      path.skip();
-    },
-    FunctionExpression(path) {
-      path.skip();
-    },
-    ClassDeclaration(path) {
-      path.skip();
-    },
-    ClassExpression(path) {
-      path.skip();
-    },
-    ObjectMethod(path) {
-      path.skip();
-    },
-  });
-}
-
 export type ThisRef = {
   kind: "props";
   path: NodePath<MemberExpression>;
