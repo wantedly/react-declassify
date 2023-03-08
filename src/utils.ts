@@ -28,6 +28,31 @@ export function importName(name: Identifier | StringLiteral): string {
   }
 }
 
+export function nonNullPath<T>(path: NodePath<T | null | undefined>): NodePath<T> | undefined {
+  return path.node ? path as NodePath<T> : undefined;
+}
+
+export function isNamedClassElement(path: NodePath): path is NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | TSDeclareMethod | ClassAccessorProperty> {
+  return path.isClassProperty()
+    || path.isClassPrivateProperty()
+    || path.isClassMethod()
+    || path.isClassPrivateMethod()
+    || path.isTSDeclareMethod()
+    || isClassAccessorProperty(path);
+}
+
+export function isClassPropertyLike(path: NodePath): path is NodePath<ClassProperty | ClassPrivateProperty> {
+  return path.isClassProperty() || path.isClassPrivateProperty();
+}
+
+export function isClassMethodLike(path: NodePath): path is NodePath<ClassMethod | ClassPrivateMethod> {
+  return path.isClassMethod() || path.isClassPrivateMethod();
+}
+
+export function isClassMethodOrDecl(path: NodePath): path is NodePath<ClassMethod | ClassPrivateMethod | TSDeclareMethod> {
+  return path.isClassMethod() || path.isClassPrivateMethod() || path.isTSDeclareMethod();
+}
+
 export function isStaticBlock(path: NodePath): path is NodePath<StaticBlock> {
   return path.node.type === "StaticBlock";
 }

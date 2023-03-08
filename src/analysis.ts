@@ -3,7 +3,7 @@ import type { Scope } from "@babel/traverse";
 import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/sites.js";
-import { memberName, memberRefName } from "./utils.js";
+import { isClassMethodLike, memberName, memberRefName } from "./utils.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -84,7 +84,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       if (fieldSites.some((site) => site.type === "expr")) {
         throw new AnalysisError(`do not use this.render`);
       }
-      const init = fieldSites.find((site) => site.hasInit);
+      const init = fieldSites.find((site) => site.init);
       if (init) {
         if (init.path.isClassMethod()) {
           render = analyzeRender(init.path, babel, locals, propVars);
@@ -93,16 +93,13 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     } else if (name === "props") {
       // TODO: refactor the logic into here
     } else if (name === "state") {
-      const init = fieldSites.find((site) => site.hasInit);
+      const init = fieldSites.find((site) => site.init);
       if (init) {
-        let initPath: NodePath<Expression | null | undefined>;
-        if (init.path.isClassProperty()) {
-          initPath = init.path.get("value");
-        } else if (init.path.isAssignmentExpression()) {
-          initPath = init.path.get("right");
-        } else {
+        const init_ = init.init!;
+        if (init_.type !== "init_value") {
           throw new AnalysisError("Non-analyzable state initializer");
         }
+        const initPath = init_.valuePath;
         if (!initPath.isObjectExpression()) {
           throw new AnalysisError("Non-analyzable state initializer");
         }
@@ -124,17 +121,13 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       }
     } else if (name === "setState") {
     } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
-      const init = fieldSites.find((site) => site.hasInit);
+      const init = fieldSites.find((site) => site.init);
       if (init) {
-        if (init.path.isClassMethod() || init.path.isClassPrivateMethod()) {
+        const init_ = init.init!;
+        if (isClassMethodLike(init.path)) {
           members.set(name, analyzeMethod(init.path));
-        } else if (init.path.isClassProperty() || init.path.isClassPrivateProperty() || init.path.isAssignmentExpression()) {
-          const initPath =
-            init.path.isAssignmentExpression()
-            ? init.path.get("right")
-            : init.path.isClassPrivateProperty()
-            ? init.path.get("value")
-            : init.path.get("value");
+        } else if (init_.type === "init_value") {
+          const initPath = init_.valuePath;
           if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
             members.set(name, analyzeFuncDef(initPath));
           } else {

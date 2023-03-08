@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, ThisExpression, TSDeclareMethod } from "@babel/types";
-import { isClassAccessorProperty, isStaticBlock, memberName, memberRefName } from "../utils.js";
+import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
 export type ThisFields = Map<string, ThisFieldSite[]>;
@@ -9,16 +9,24 @@ export type ThisFieldSite = {
   type: "class_field";
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
   hasType: boolean;
-  hasInit: boolean;
+  init: FieldInit | undefined;
   hasWrite: undefined;
   hasSideEffect: boolean;
 } | {
   type: "expr";
   path: NodePath<Expression>;
   hasType: undefined;
-  hasInit: undefined;
+  init: undefined;
   hasWrite: boolean;
   hasSideEffect: undefined;
+};
+
+export type FieldInit = {
+  type: "init_value";
+  valuePath: NodePath<Expression>
+} | {
+  type: "init_method";
+  methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
 };
 
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
@@ -26,14 +34,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
-    if (
-      itemPath.isClassProperty()
-      || itemPath.isClassPrivateProperty()
-      || itemPath.isClassMethod()
-      || itemPath.isClassPrivateMethod()
-      || isClassAccessorProperty(itemPath)
-      || itemPath.isTSDeclareMethod()
-    ) {
+    if (isNamedClassElement(itemPath)) {
       if (itemPath.node.static) {
         throw new AnalysisError(`Not implemented yet: static`);
       }
@@ -45,23 +46,26 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         fields.set(name, []);
       }
       const field = fields.get(name)!;
-      if (itemPath.isClassProperty() || itemPath.isClassPrivateProperty()) {
+      if (isClassPropertyLike(itemPath)) {
+        const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         field.push({
           type: "class_field",
           path: itemPath,
           hasType: !!itemPath.node.typeAnnotation,
-          hasInit: !!itemPath.node.value,
+          init: valuePath ?  { type: "init_value", valuePath } : undefined,
           hasWrite: undefined,
           hasSideEffect: !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
         });
-      } else if (itemPath.isClassMethod() || itemPath.isClassPrivateMethod() || itemPath.isTSDeclareMethod()) {
+      } else if (isClassMethodOrDecl(itemPath)) {
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
           field.push({
             type: "class_field",
             path: itemPath,
             hasType: itemPath.isTSDeclareMethod(),
-            hasInit: !itemPath.isTSDeclareMethod(),
+            init: isClassMethodLike(itemPath)
+              ? { type: "init_method", methodPath: itemPath }
+              : undefined,
             hasWrite: undefined,
             hasSideEffect: false,
           });
@@ -133,6 +137,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       )) {
         throw new AnalysisError(`Non-analyzable initialization in constructor`);
       }
+      const exprPath = (stmt as NodePath<ExpressionStatement>).get("expression") as NodePath<AssignmentExpression>;
       const name = memberRefName(stmt.node.expression.left);
       if (name == null) {
         throw new AnalysisError(`Non-analyzable initialization in constructor`);
@@ -145,9 +150,12 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       const field = fields.get(name)!;
       field.push({
         type: "class_field",
-        path: (stmt as NodePath<ExpressionStatement>).get("expression") as NodePath<AssignmentExpression>,
+        path: exprPath,
         hasType: false,
-        hasInit: true,
+        init: {
+          type: "init_value",
+          valuePath: exprPath.get("right"),
+        },
         hasWrite: undefined,
         hasSideEffect: estimateSideEffect(stmt.node.expression.right),
       });
@@ -191,38 +199,29 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         type: "expr",
         path: thisMemberPath,
         hasType: undefined,
-        hasInit: undefined,
+        init: undefined,
         hasWrite,
         hasSideEffect: undefined
       });
     });
   }
   for (const itemPath of path.get("body").get("body")) {
-    if (
-      itemPath.isClassProperty()
-      || itemPath.isClassPrivateProperty()
-      || itemPath.isClassMethod()
-      || itemPath.isClassPrivateMethod()
-      || isClassAccessorProperty(itemPath)
-      || itemPath.isTSDeclareMethod()
-    ) {
+    if (isNamedClassElement(itemPath)) {
       if (itemPath.node.static) {
         throw new AnalysisError(`Not implemented yet: static`);
       }
-      if (itemPath.isClassProperty() || itemPath.isClassPrivateProperty()) {
-        const itemPath_: NodePath<ClassProperty | ClassPrivateProperty> = itemPath;
-        const valuePath = itemPath_.get("value");
+      if (isClassPropertyLike(itemPath)) {
+        const valuePath = itemPath.get("value");
         if (valuePath.isExpression()) {
           traverseItem(valuePath);
         }
-      } else if (itemPath.isClassMethod() || itemPath.isClassPrivateMethod()) {
-        const itemPath_: NodePath<ClassMethod | ClassPrivateMethod > = itemPath;
+      } else if (isClassMethodLike(itemPath)) {
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
-          for (const paramPath of itemPath_.get("params")) {
+          for (const paramPath of itemPath.get("params")) {
             traverseItem(paramPath);
           }
-          traverseItem(itemPath_.get("body"));
+          traverseItem(itemPath.get("body"));
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
         } else if (kind === "constructor") {
@@ -245,7 +244,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   }
 
   for (const [name, fieldSites] of fields.entries()) {
-    const numInits = fieldSites.reduce((n, site) => n + Number(!!site.hasInit), 0);
+    const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);
     }
