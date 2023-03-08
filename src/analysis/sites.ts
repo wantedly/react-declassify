@@ -31,6 +31,12 @@ export type FieldInit = {
 
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
   const fields = new Map<string, ThisFieldSite[]>();
+  function getField(name: string): ThisFieldSite[] {
+    if (!fields.has(name)) {
+      fields.set(name, []);
+    }
+    return fields.get(name)!;
+  }
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
@@ -42,10 +48,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       if (name == null) {
         throw new AnalysisError(`Unnamed class element`);
       }
-      if (!fields.has(name)) {
-        fields.set(name, []);
-      }
-      const field = fields.get(name)!;
+      const field = getField(name);
       if (isClassPropertyLike(itemPath)) {
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         field.push({
@@ -144,10 +147,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       }
       // TODO: check for parameter/local variable reference
 
-      if (!fields.has(name)) {
-        fields.set(name, []);
-      }
-      const field = fields.get(name)!;
+      const field = getField(name)!;
       field.push({
         type: "class_field",
         path: exprPath,
@@ -178,10 +178,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         throw new AnalysisError(`Unrecognized this-property reference`);
       }
 
-      if (!fields.has(name)) {
-        fields.set(name, []);
-      }
-      const field = fields.get(name)!;
+      const field = getField(name)!;
 
       const thisMemberParentPath = thisMemberPath.parentPath;
       const hasWrite =
@@ -244,6 +241,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   }
 
   for (const [name, fieldSites] of fields.entries()) {
+    if (fieldSites.length === 0) {
+      fields.delete(name);
+    }
     const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);

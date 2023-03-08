@@ -77,9 +77,6 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   let render: RenderAnalysis | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   for (const [name, fieldSites] of sites.entries()) {
-    if (fieldSites.length === 0) {
-      continue;
-    }
     if (name === "render") {
       if (fieldSites.some((site) => site.type === "expr")) {
         throw new AnalysisError(`do not use this.render`);
