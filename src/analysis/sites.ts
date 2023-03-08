@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, ThisExpression, TSDeclareMethod } from "@babel/types";
+import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod } from "@babel/types";
 import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
@@ -14,7 +14,7 @@ export type ThisFieldSite = {
   hasSideEffect: boolean;
 } | {
   type: "expr";
-  path: NodePath<Expression>;
+  path: NodePath<MemberExpression>;
   hasType: undefined;
   init: undefined;
   hasWrite: boolean;

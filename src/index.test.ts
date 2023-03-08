@@ -506,8 +506,8 @@ describe("react-declassify", () => {
       `;
       const output = dedent`\
         const C = () => {
-          const [bar, setBar] = React.useState(2);
           const [foo, setFoo] = React.useState(1);
+          const [bar, setBar] = React.useState(2);
           return <button onClick={() => setBar(3)}>{foo}</button>;
         };
       `;
@@ -549,8 +549,8 @@ describe("react-declassify", () => {
       `;
       const output = dedent`\
         const C = () => {
-          const [bar, setBar] = React.useState(2);
           const [foo, setFoo] = React.useState(1);
+          const [bar, setBar] = React.useState(2);
           return <button onClick={() => setBar(3)}>{foo}</button>;
         };
       `;

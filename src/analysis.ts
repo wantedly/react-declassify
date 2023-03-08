@@ -72,10 +72,9 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   const sites = analyzeThisFields(path);
   const locals = analyzeOuterCapturings(path);
   const state = new Map<string, StateField>();
-  const thisRefs = analyzeThisRefs(path, state, babel, locals);
-  const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
-  let render: RenderAnalysis | undefined = undefined;
+  let renderPath: NodePath<ClassMethod> | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
+  const thisRefs: ThisRef[] = [];
   for (const [name, fieldSites] of sites.entries()) {
     if (name === "render") {
       if (fieldSites.some((site) => site.type === "expr")) {
@@ -84,11 +83,19 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       const init = fieldSites.find((site) => site.init);
       if (init) {
         if (init.path.isClassMethod()) {
-          render = analyzeRender(init.path, babel, locals, propVars);
+          renderPath = init.path;
         }
       }
     } else if (name === "props") {
-      // TODO: refactor the logic into here
+      for (const site of fieldSites) {
+        if (site.type !== "expr" || site.hasWrite) {
+          throw new AnalysisError(`Invalid use of this.props`);
+        }
+        thisRefs.push({
+          kind: "props",
+          path: site.path,
+        });
+      }
     } else if (name === "state") {
       const init = fieldSites.find((site) => site.init);
       if (init) {
@@ -116,7 +123,66 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
           field.init = fieldInitPath;
         }
       }
+      for (const site of fieldSites) {
+        if (site.init) {
+          continue;
+        }
+        if (site.type !== "expr" || site.hasWrite) {
+          throw new AnalysisError(`Invalid use of this.state`);
+        }
+        const gpPath = site.path.parentPath;
+        if (!gpPath.isMemberExpression()) {
+          throw new AnalysisError(`Stray this.state`);
+        }
+        const stateName = memberRefName(gpPath.node);
+        if (stateName == null) {
+          throw new AnalysisError(`Non-analyzable state name`);
+        }
+        const field = ensureState(state, stateName, babel, locals);
+        thisRefs.push({
+          kind: "state",
+          path: gpPath,
+          field,
+        });
+      }
     } else if (name === "setState") {
+      for (const site of fieldSites) {
+        if (site.type !== "expr" || site.hasWrite) {
+          throw new AnalysisError(`Invalid use of this.setState`);
+        }
+        const gpPath = site.path.parentPath;
+        if (!gpPath.isCallExpression()) {
+          throw new AnalysisError(`Stray this.setState`);
+        }
+        const args = gpPath.get("arguments");
+        if (args.length !== 1) {
+          throw new AnalysisError(`Non-analyzable setState`);
+        }
+        const arg0 = args[0]!;
+        if (arg0.isObjectExpression()) {
+          const props = arg0.get("properties");
+          if (props.length !== 1) {
+            throw new AnalysisError(`Multiple assignments in setState is not yet supported`);
+          }
+          const prop0 = props[0]!;
+          if (!prop0.isObjectProperty()) {
+            throw new AnalysisError(`Non-analyzable setState`);
+          }
+          const setStateName = memberName(prop0.node);
+          if (setStateName == null) {
+            throw new AnalysisError(`Non-analyzable setState name`);
+          }
+          const field = ensureState(state, setStateName, babel, locals);
+          thisRefs.push({
+            kind: "setState",
+            path: gpPath,
+            field,
+            rhs: prop0.get("value") as NodePath<Expression>,
+          });
+        } else {
+          throw new AnalysisError(`Non-analyzable setState`);
+        }
+      }
     } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
       const init = fieldSites.find((site) => site.init);
       if (init) {
@@ -134,13 +200,28 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
           throw new AnalysisError(`Non-analyzable initialization of ${name}`);
         }
       }
+      for (const site of fieldSites) {
+        if (site.init) {
+          continue;
+        }
+        if (site.type !== "expr" || site.hasWrite) {
+          throw new AnalysisError(`Invalid use of this.${name}`);
+        }
+        thisRefs.push({
+          kind: "userDefined",
+          path: site.path,
+          name,
+        });
+      }
     } else {
       throw new AnalysisError(`Cannot transform ${name}`);
     }
   }
-  if (!render) {
+  if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
+  const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
+  const render = analyzeRender(renderPath, babel, locals, propVars);
   return {
     render,
     state,
@@ -343,105 +424,6 @@ function analyzeProps(
     }
   }
   return { propVars, propVarNames, propBinders };
-}
-
-function analyzeThisRefs(path: NodePath<ClassDeclaration>, state: Map<string, StateField>, babel: typeof import("@babel/core"), locals: Set<string>): ThisRef[] {
-  const thisRefs: ThisRef[] = [];
-  for (const mem of path.get("body").get("body")) {
-    if (mem.isClassMethod()) {
-      if (mem.node.static) {
-        // TODO
-      } else {
-        for (const param of mem.get("params")) {
-          analyzeThisRefsIn(thisRefs, param, state, babel, locals);
-        }
-        analyzeThisRefsIn(thisRefs, mem.get("body"), state, babel, locals);
-      }
-    } else if (mem.isClassProperty()) {
-      if (mem.node.static) {
-        // TODO
-      } else {
-        const value = mem.get("value");
-        if (value.isExpression()) {
-          analyzeThisRefsIn(thisRefs, value, state, babel, locals);
-        }
-      }
-    }
-  }
-  return thisRefs;
-}
-
-function analyzeThisRefsIn(thisRefs: ThisRef[], path: NodePath, state: Map<string, StateField>, babel: typeof import("@babel/core"), locals: Set<string>) {
-  traverseThis(path, (path) => {
-    const parentPath = path.parentPath;
-    if (!parentPath.isMemberExpression()) {
-      throw new AnalysisError(`Stray this`);
-    }
-    const name = memberRefName(parentPath.node);
-    if (name === "props") {
-      thisRefs.push({
-        kind: "props",
-        path: parentPath,
-      });
-    } else if (name === "state") {
-      const gpPath = parentPath.parentPath;
-      if (!gpPath.isMemberExpression()) {
-        // throw new AnalysisError(`Stray this.state`);
-        return;
-      }
-      const stateName = memberRefName(gpPath.node);
-      if (stateName == null) {
-        throw new AnalysisError(`Non-analyzable state name`);
-      }
-      const field = ensureState(state, stateName, babel, locals);
-      thisRefs.push({
-        kind: "state",
-        path: gpPath,
-        field,
-      });
-    } else if (name === "setState") {
-      const gpPath = parentPath.parentPath;
-      if (!gpPath.isCallExpression()) {
-        throw new AnalysisError(`Stray this.setState`);
-      }
-      const args = gpPath.get("arguments");
-      if (args.length !== 1) {
-        throw new AnalysisError(`Non-analyzable setState`);
-      }
-      const arg0 = args[0]!;
-      if (arg0.isObjectExpression()) {
-        const props = arg0.get("properties");
-        if (props.length !== 1) {
-          throw new AnalysisError(`Multiple assignments in setState is not yet supported`);
-        }
-        const prop0 = props[0]!;
-        if (!prop0.isObjectProperty()) {
-          throw new AnalysisError(`Non-analyzable setState`);
-        }
-        const setStateName = memberName(prop0.node);
-        if (setStateName == null) {
-          throw new AnalysisError(`Non-analyzable setState name`);
-        }
-        const field = ensureState(state, setStateName, babel, locals);
-        thisRefs.push({
-          kind: "setState",
-          path: gpPath,
-          field,
-          rhs: prop0.get("value") as NodePath<Expression>,
-        });
-      } else {
-        throw new AnalysisError(`Non-analyzable setState`);
-      }
-    } else if (name != null && !SPECIAL_MEMBER_NAMES.has(name)) {
-      thisRefs.push({
-        kind: "userDefined",
-        path: parentPath,
-        name,
-      });
-    } else {
-      throw new AnalysisError(`Unrecognized class field reference: ${name ?? "<computed>"}`);
-    }
-  });
 }
 
 function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {
