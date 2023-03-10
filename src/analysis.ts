@@ -3,6 +3,7 @@ import type { Scope } from "@babel/traverse";
 import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/sites.js";
+import { analyzeState } from "./analysis/state.js";
 import { isClassMethodLike, memberName, memberRefName } from "./utils.js";
 
 export { AnalysisError } from "./analysis/error.js";
@@ -70,8 +71,14 @@ export type StateField = {
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const sites = analyzeThisFields(path);
+
+  const stateObjSites = sites.get("state") ?? [];
+  sites.delete("state");
+  const setStateSites = sites.get("setState") ?? [];
+  sites.delete("setState");
+  const states = analyzeState(stateObjSites, setStateSites);
+
   const locals = analyzeOuterCapturings(path);
-  const state = new Map<string, StateField>();
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   const thisRefs: ThisRef[] = [];
@@ -95,93 +102,6 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
           kind: "props",
           path: site.path,
         });
-      }
-    } else if (name === "state") {
-      const init = fieldSites.find((site) => site.init);
-      if (init) {
-        const init_ = init.init!;
-        if (init_.type !== "init_value") {
-          throw new AnalysisError("Non-analyzable state initializer");
-        }
-        const initPath = init_.valuePath;
-        if (!initPath.isObjectExpression()) {
-          throw new AnalysisError("Non-analyzable state initializer");
-        }
-        for (const fieldPath of initPath.get("properties")) {
-          if (!fieldPath.isObjectProperty()) {
-            throw new AnalysisError("Non-analyzable state initializer");
-          }
-          const fieldName = memberName(fieldPath.node);
-          if (fieldName == null) {
-            throw new AnalysisError("Non-analyzable state initializer");
-          }
-          const fieldInitPath = fieldPath.get("value");
-          if (!fieldInitPath.isExpression()) {
-            throw new AnalysisError("Non-analyzable state initializer");
-          }
-          const field = ensureState(state, fieldName, babel, locals);
-          field.init = fieldInitPath;
-        }
-      }
-      for (const site of fieldSites) {
-        if (site.init) {
-          continue;
-        }
-        if (site.type !== "expr" || site.hasWrite) {
-          throw new AnalysisError(`Invalid use of this.state`);
-        }
-        const gpPath = site.path.parentPath;
-        if (!gpPath.isMemberExpression()) {
-          throw new AnalysisError(`Stray this.state`);
-        }
-        const stateName = memberRefName(gpPath.node);
-        if (stateName == null) {
-          throw new AnalysisError(`Non-analyzable state name`);
-        }
-        const field = ensureState(state, stateName, babel, locals);
-        thisRefs.push({
-          kind: "state",
-          path: gpPath,
-          field,
-        });
-      }
-    } else if (name === "setState") {
-      for (const site of fieldSites) {
-        if (site.type !== "expr" || site.hasWrite) {
-          throw new AnalysisError(`Invalid use of this.setState`);
-        }
-        const gpPath = site.path.parentPath;
-        if (!gpPath.isCallExpression()) {
-          throw new AnalysisError(`Stray this.setState`);
-        }
-        const args = gpPath.get("arguments");
-        if (args.length !== 1) {
-          throw new AnalysisError(`Non-analyzable setState`);
-        }
-        const arg0 = args[0]!;
-        if (arg0.isObjectExpression()) {
-          const props = arg0.get("properties");
-          if (props.length !== 1) {
-            throw new AnalysisError(`Multiple assignments in setState is not yet supported`);
-          }
-          const prop0 = props[0]!;
-          if (!prop0.isObjectProperty()) {
-            throw new AnalysisError(`Non-analyzable setState`);
-          }
-          const setStateName = memberName(prop0.node);
-          if (setStateName == null) {
-            throw new AnalysisError(`Non-analyzable setState name`);
-          }
-          const field = ensureState(state, setStateName, babel, locals);
-          thisRefs.push({
-            kind: "setState",
-            path: gpPath,
-            field,
-            rhs: prop0.get("value") as NodePath<Expression>,
-          });
-        } else {
-          throw new AnalysisError(`Non-analyzable setState`);
-        }
       }
     } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
       const init = fieldSites.find((site) => site.init);
@@ -222,9 +142,36 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   }
   const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
   const render = analyzeRender(renderPath, babel, locals, propVars);
+
+  const stateMap = new Map<string, StateField>();
+  for (const [name, stateAnalysis] of states.entries()) {
+    const field = ensureState(stateMap, name, babel, locals);
+    if (stateAnalysis.init) {
+      field.init = stateAnalysis.init.valuePath;
+    }
+    for (const site of stateAnalysis.sites) {
+      if (site.type === "state_init") {
+        // do nothing
+      } else if (site.type === "expr") {
+        thisRefs.push({
+          kind: "state",
+          path: site.path,
+          field,
+        });
+      } else {
+        thisRefs.push({
+          kind: "setState",
+          path: site.path,
+          field,
+          rhs: site.valuePath,
+        });
+      }
+    }
+  }
+
   return {
     render,
-    state,
+    state: stateMap,
     members,
     thisRefs,
     propVars,
