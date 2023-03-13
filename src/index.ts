@@ -1,4 +1,4 @@
-import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
+import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, LVal, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignTypeAnnotation, importName, isTS } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, RefInfo } from "./analysis.js";
@@ -85,29 +85,32 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   const { types: t } = babel;
   const { ts } = options;
 
-  for (const pv of body.propVars) {
-    if (pv.oldName !== pv.newName) {
-      // Rename variables that props are bound to.
-      // E.g. `foo` as in `const { foo } = this.props`.
-      // This is to ensure we hoist them correctly.
-      pv.scope.rename(pv.oldName, pv.newName);
-    }
-  }
-  for (const pb of body.propBinders) {
+  for (const alias of body.props.allAliases) {
     // Remove assignments of this.props.
     // We re-add them later to achieve hoisting.
-    pb.path.remove();
+    removeLVal(alias.path);
+  }
+  for (const [, prop] of body.props.props) {
+    for (const alias of prop.aliases) {
+      if (alias.localName !== prop.newAliasName!) {
+        // Rename variables that props are bound to.
+        // E.g. `foo` as in `const { foo } = this.props`.
+        // This is to ensure we hoist them correctly.
+        alias.scope.rename(alias.localName, prop.newAliasName!);
+      }
+    }
   }
   for (const ren of body.render.renames) {
     // Rename local variables in the render method
     // to avoid unintentional variable capturing.
     ren.scope.rename(ren.oldName, ren.newName);
   }
+  for (const site of body.props.sites) {
+    // this.props -> props
+    site.path.replaceWith(site.path.node.property);
+  }
   for (const tr of body.thisRefs) {
-    if (tr.kind === "props") {
-      // this.props -> props
-      tr.path.replaceWith(tr.path.node.property);
-    } else if (tr.kind === "state") {
+    if (tr.kind === "state") {
       // this.state.foo -> foo
       tr.path.replaceWith(t.identifier(tr.field.localName));
     } else if (tr.kind === "setState") {
@@ -125,17 +128,18 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
-  if (body.propVarNames.size > 0) {
+  const propsWithAlias = Array.from(body.props.props).filter(([, prop]) => prop.aliases.length > 0);
+  if (propsWithAlias.length > 0) {
     // Expand this.props into variables.
     // E.g. const { foo, bar } = props;
     preamble.push(t.variableDeclaration("const", [
       t.variableDeclarator(
-        t.objectPattern(Array.from(body.propVarNames.entries()).map(([propName, localName]) =>
+        t.objectPattern(propsWithAlias.map(([name, prop]) =>
           t.objectProperty(
-            t.identifier(propName),
-            t.identifier(localName),
+            t.identifier(name),
+            t.identifier(prop.newAliasName!),
             false,
-            propName === localName,
+            name === prop.newAliasName!,
           ),
         )),
         t.identifier("props"),
@@ -252,6 +256,34 @@ function getReactImport(
     )
   );
   return t.identifier(newName);
+}
+
+function removeLVal(path: NodePath<LVal>) {
+  if (path.parentPath.isVariableDeclarator({ id: path.node })) {
+    if (path.parentPath.parentPath.isVariableDeclaration()) {
+      const declPath = path.parentPath.parentPath;
+      if (declPath.node.declarations.length === 1) {
+        declPath.remove();
+      } else {
+        path.parentPath.remove();
+      }
+      return;
+    }
+  } else if (path.parentPath.isObjectProperty({ value: path.node })) {
+    if (path.parentPath.parentPath.isObjectPattern()) {
+      const patPath = path.parentPath.parentPath;
+      if (patPath.node.properties.length === 1) {
+        removeLVal(patPath);
+      } else {
+        path.parentPath.remove();
+      }
+      return;
+    }
+  }
+  if (path.parentPath.node) {
+    throw new Error(`Cannot remove lval: child of ${path.parentPath.node.type}`);
+  }
+  throw new Error(`Cannot remove lval: ${path.node.type}`);
 }
 
 /**

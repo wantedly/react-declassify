@@ -5,6 +5,7 @@ import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState } from "./analysis/state.js";
 import { isClassMethodLike, memberName, memberRefName } from "./utils.js";
+import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -13,6 +14,7 @@ export type {
   RefInfo
 } from "./analysis/head.js";
 export { analyzeHead } from "./analysis/head.js";
+export type { PropsObjAnalysis } from "./analysis/prop.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
   // Special variables
@@ -58,9 +60,7 @@ export type ComponentBody = {
   state: Map<string, StateField>;
   members: Map<string, MethodAnalysis>;
   thisRefs: ThisRef[];
-  propVars: PropVar[];
-  propVarNames: Map<string, string>;
-  propBinders: PropBinder[];
+  props: PropsObjAnalysis;
 };
 
 export type StateField = {
@@ -71,6 +71,9 @@ export type StateField = {
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const sites = analyzeThisFields(path);
+
+  const propsObjSites = sites.get("props") ?? [];
+  sites.delete("props");
 
   const stateObjSites = sites.get("state") ?? [];
   sites.delete("state");
@@ -92,16 +95,6 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
         if (init.path.isClassMethod()) {
           renderPath = init.path;
         }
-      }
-    } else if (name === "props") {
-      for (const site of fieldSites) {
-        if (site.type !== "expr" || site.hasWrite) {
-          throw new AnalysisError(`Invalid use of this.props`);
-        }
-        thisRefs.push({
-          kind: "props",
-          path: site.path,
-        });
       }
     } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
       const init = fieldSites.find((site) => site.init);
@@ -140,8 +133,14 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const { propVars, propVarNames, propBinders } = analyzeProps(thisRefs, babel, locals);
-  const render = analyzeRender(renderPath, babel, locals, propVars);
+  const props = analyzeProps(propsObjSites);
+  for (const [name, propAnalysis] of props.props) {
+    if (propAnalysis.aliases.length > 0) {
+      propAnalysis.newAliasName = newLocal(name, babel, locals);
+    }
+  }
+
+  const render = analyzeRender(renderPath, babel, locals, props);
 
   const stateMap = new Map<string, StateField>();
   for (const [name, stateAnalysis] of states.entries()) {
@@ -174,9 +173,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     state: stateMap,
     members,
     thisRefs,
-    propVars,
-    propVarNames,
-    propBinders,
+    props,
   };
 }
 
@@ -195,14 +192,14 @@ function analyzeRender(
   path: NodePath<ClassMethod>,
   babel: typeof import("@babel/core"),
   locals: Set<string>,
-  propVars: PropVar[],
+  props: PropsObjAnalysis,
 ): RenderAnalysis {
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
     if (
-      propVars.some((pv) => pv.scope === binding.scope && pv.oldName ===name)
+      props.allAliases.some((alias) => alias.scope === binding.scope && alias.localName === name)
     ) {
-      // Already handled as a propVar
+      // Already handled as a prop alias
       continue;
     }
     const newName = newLocal(name, babel, locals);
@@ -231,152 +228,7 @@ function analyzeFuncDef(initPath: NodePath<FunctionExpression | ArrowFunctionExp
   return { type: "func_def", initPath };
 }
 
-export type PropVar = {
-  scope: Scope;
-  propName: string;
-  oldName: string;
-  newName: string;
-};
-
-export type PropBinder = {
-  path: NodePath;
-};
-
-/**
- * Detects assignments that expand `this.props` to variables, like:
- * 
- * ```js
- * const { foo, bar } = this.props;
- * ```
- * 
- * or:
- * 
- * ```js
- * const foo = this.props.foo;
- * const bar = this.props.bar;
- * ```
- */
-function analyzeProps(
-  thisRefs: ThisRef[],
-  babel: typeof import("@babel/core"),
-  locals: Set<string>,
-): {
-  propVars: PropVar[];
-  propVarNames: Map<string, string>;
-  propBinders: PropBinder[];
-} {
-  const propVars: PropVar[] = [];
-  const propVarNames = new Map<string, string>();
-  const propBinders: PropBinder[] = [];
-
-  function getNewName(propName: string): string {
-    const reusable = propVarNames.get(propName);
-    if (reusable != null) return reusable;
-
-    const newName = newLocal(propName, babel, locals);
-    propVarNames.set(propName, newName);
-    return newName;
-  }
-
-  for (const thisRef of thisRefs) {
-    if (thisRef.kind !== "props") {
-      continue;
-    }
-    const memPath = thisRef.path;
-    if (
-      memPath.parentPath.isMemberExpression()
-      && memPath.parentPath.node.object === memPath.node
-      && memPath.parentPath.parentPath.isVariableDeclarator()
-      && memPath.parentPath.parentPath.node.init === memPath.parentPath.node
-    ) {
-      const propPath = memPath.parentPath;
-      const declaratorPath = memPath.parentPath.parentPath;
-      const declarationPath = memPath.parentPath.parentPath.parentPath;
-      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
-        continue;
-      }
-      const lval = declaratorPath.get("id");
-      if (!lval.isIdentifier()) {
-        continue;
-      }
-      const propName = memberRefName(propPath.node);
-      if (propName == null) {
-        continue;
-      }
-      
-      // const foo = this.props.foo;
-      propVars.push({
-        scope: memPath.scope,
-        propName,
-        oldName: lval.node.name,
-        newName: getNewName(propName),
-      });
-      if (declarationPath.node.declarations.length === 1) {
-        propBinders.push({
-          path: declarationPath,
-        });
-      } else {
-        propBinders.push({
-          path: declaratorPath,
-        });
-      }
-    } else if (
-      memPath.parentPath.isVariableDeclarator()
-      && memPath.parentPath.node.init === memPath.node
-    ) {
-      const declaratorPath = memPath.parentPath;
-      const declarationPath = memPath.parentPath.parentPath;
-      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
-        continue;
-      }
-      const lval = declaratorPath.get("id");
-      if (!lval.isObjectPattern()) {
-        continue;
-      }
-
-      // const { foo } = this.props;
-      const lvpropPaths: NodePath[] = [];
-      let replaceAll = true;
-      for (const lvprop of lval.get("properties")) {
-        if (!lvprop.isObjectProperty()) {
-          replaceAll = false;
-          break;
-        }
-        const propName = memberName(lvprop.node);
-        if (propName == null) {
-          replaceAll = false;
-          break;
-        }
-        if (lvprop.node.value.type === "Identifier") {
-          propVars.push({
-            scope: memPath.scope,
-            propName,
-            oldName: lvprop.node.value.name,
-            newName: getNewName(propName),
-          });
-          lvpropPaths.push(lvprop);
-        } else {
-          replaceAll = false;
-        }
-      }
-      if (replaceAll && declarationPath.node.declarations.length === 1) {
-        propBinders.push({ path: declarationPath });
-      } else if (replaceAll) {
-        propBinders.push({ path: declaratorPath });
-      } else {
-        for (const lvprop of lvpropPaths) {
-          propBinders.push({ path: lvprop });
-        }
-      }
-    }
-  }
-  return { propVars, propVarNames, propBinders };
-}
-
 export type ThisRef = {
-  kind: "props";
-  path: NodePath<MemberExpression>;
-} | {
   kind: "state",
   path: NodePath<MemberExpression>;
   field: StateField,
@@ -446,5 +298,5 @@ function newLocal(baseName: string, babel: typeof import("@babel/core"), locals:
 }
 
 export function needsProps(body: ComponentBody): boolean {
-  return body.thisRefs.some((r) => r.kind === "props");
+  return body.props.sites.length > 0;
 }
