@@ -489,6 +489,33 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("Transforms defaultProps", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          static defaultProps = {
+            foo: 42,
+            quux: 0,
+          };
+          render() {
+            const { foo, bar } = this.props;
+            return foo + bar + this.props.baz + this.props.quux;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = props => {
+          const {
+            foo = 42,
+            bar,
+            baz,
+            quux = 0
+          } = props;
+          return foo + bar + baz + quux;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   describe("State transformation", () => {

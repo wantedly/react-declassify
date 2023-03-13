@@ -71,12 +71,14 @@ export const C = props => {
   - [x] Transform `P` type argument
   - [ ] Transform `S` type argument
   - [ ] Transform generic components
+  - [ ] Modify Props appropriately if defaultProps is present
+  - [ ] Modify Props appropriately if `children` seems to be used
 - [ ] Support for `this.props`
   - [x] Convert `this.props` to `props` parameter
   - [ ] Rename `props` if necessary
   - [x] Hoist expansion of `this.props`
   - [x] Rename prop variables if necessary
-  - [ ] transform `defaultProps`
+  - [x] transform `defaultProps`
 - [ ] Support for user-defined methods
   - [x] Transform methods to `function`s
   - [x] Transform class fields initialized as functions to `function`s

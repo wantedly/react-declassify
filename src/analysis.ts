@@ -70,10 +70,12 @@ export type StateField = {
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
-  const sites = analyzeThisFields(path);
+  const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
   const propsObjSites = sites.get("props") ?? [];
   sites.delete("props");
+  const defaultPropsObjSites = staticFields.get("defaultProps") ?? [];
+  staticFields.delete("defaultProps");
 
   const stateObjSites = sites.get("state") ?? [];
   sites.delete("state");
@@ -130,12 +132,19 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
       throw new AnalysisError(`Cannot transform ${name}`);
     }
   }
+  for (const [name] of staticFields) {
+    if (!SPECIAL_STATIC_NAMES.has(name)) {
+      throw new AnalysisError(`Cannot transform static ${name}`);
+    } else {
+      throw new AnalysisError(`Cannot transform static ${name}`);
+    }
+  }
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites);
+  const props = analyzeProps(propsObjSites, defaultPropsObjSites);
   for (const [name, propAnalysis] of props.props) {
-    if (propAnalysis.aliases.length > 0) {
+    if (propAnalysis.needsAlias) {
       propAnalysis.newAliasName = newLocal(name, babel, locals);
     }
   }

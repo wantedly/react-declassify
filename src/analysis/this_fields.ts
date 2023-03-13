@@ -3,7 +3,10 @@ import type { AssignmentExpression, CallExpression, ClassAccessorProperty, Class
 import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
-export type ThisFields = Map<string, ThisFieldSite[]>;
+export type ThisFields = {
+  thisFields: Map<string, ThisFieldSite[]>;
+  staticFields: Map<string, StaticFieldSite[]>;
+};
 
 export type ThisFieldSite = {
   type: "class_field";
@@ -29,26 +32,40 @@ export type FieldInit = {
   methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
 };
 
+export type StaticFieldSite = {
+  type: "class_field";
+  path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
+  hasType: boolean;
+  init: FieldInit | undefined;
+  hasWrite: undefined;
+  hasSideEffect: boolean;
+};
+
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
-  const fields = new Map<string, ThisFieldSite[]>();
-  function getField(name: string): ThisFieldSite[] {
-    if (!fields.has(name)) {
-      fields.set(name, []);
+  const thisFields = new Map<string, ThisFieldSite[]>();
+  function getThisField(name: string): ThisFieldSite[] {
+    if (!thisFields.has(name)) {
+      thisFields.set(name, []);
     }
-    return fields.get(name)!;
+    return thisFields.get(name)!;
+  }
+  const staticFields = new Map<string, StaticFieldSite[]>();
+  function getStaticField(name: string): StaticFieldSite[] {
+    if (!staticFields.has(name)) {
+      staticFields.set(name, []);
+    }
+    return staticFields.get(name)!;
   }
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
     if (isNamedClassElement(itemPath)) {
-      if (itemPath.node.static) {
-        throw new AnalysisError(`Not implemented yet: static`);
-      }
+      const isStatic = itemPath.node.static;
       const name = memberName(itemPath.node);
       if (name == null) {
         throw new AnalysisError(`Unnamed class element`);
       }
-      const field = getField(name);
+      const field = isStatic ? getStaticField(name) : getThisField(name);
       if (isClassPropertyLike(itemPath)) {
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         field.push({
@@ -75,6 +92,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
         } else if (kind === "constructor") {
+          if (isStatic) {
+            throw new Error("static constructor found");
+          }
           constructor = itemPath as NodePath<ClassMethod>;
         } else {
           throw new AnalysisError(`Not implemented yet: ${kind}`);
@@ -147,7 +167,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       }
       // TODO: check for parameter/local variable reference
 
-      const field = getField(name)!;
+      const field = getThisField(name)!;
       field.push({
         type: "class_field",
         path: exprPath,
@@ -178,7 +198,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         throw new AnalysisError(`Unrecognized this-property reference`);
       }
 
-      const field = getField(name)!;
+      const field = getThisField(name)!;
 
       const thisMemberParentPath = thisMemberPath.parentPath;
       const hasWrite =
@@ -205,7 +225,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   for (const itemPath of path.get("body").get("body")) {
     if (isNamedClassElement(itemPath)) {
       if (itemPath.node.static) {
-        throw new AnalysisError(`Not implemented yet: static`);
+        continue;
       }
       if (isClassPropertyLike(itemPath)) {
         const valuePath = itemPath.get("value");
@@ -240,9 +260,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     }
   }
 
-  for (const [name, fieldSites] of fields.entries()) {
+  for (const [name, fieldSites] of thisFields) {
     if (fieldSites.length === 0) {
-      fields.delete(name);
+      thisFields.delete(name);
     }
     const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
@@ -253,8 +273,21 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       throw new AnalysisError(`${name} is declared more than once`);
     }
   }
+  for (const [name, fieldSites] of staticFields) {
+    if (fieldSites.length === 0) {
+      thisFields.delete(name);
+    }
+    const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
+    if (numInits > 1) {
+      throw new AnalysisError(`static ${name} is initialized more than once`);
+    }
+    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.hasType), 0);
+    if (numTypes > 1) {
+      throw new AnalysisError(`static ${name} is declared more than once`);
+    }
+  }
 
-  return fields;
+  return { thisFields, staticFields };
 }
 
 function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {

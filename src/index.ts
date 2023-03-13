@@ -105,9 +105,18 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     // to avoid unintentional variable capturing.
     ren.scope.rename(ren.oldName, ren.newName);
   }
-  for (const site of body.props.sites) {
-    // this.props -> props
-    site.path.replaceWith(site.path.node.property);
+  if (body.props.hasDefaults) {
+    for (const [, prop] of body.props.props) {
+      for (const site of prop.sites) {
+        // this.props.foo -> foo
+        site.path.replaceWith(t.identifier(prop.newAliasName!));
+      }
+    }
+  } else {
+    for (const site of body.props.sites) {
+      // this.props -> props
+      site.path.replaceWith(site.path.node.property);
+    }
   }
   for (const tr of body.thisRefs) {
     if (tr.kind === "state") {
@@ -128,7 +137,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
-  const propsWithAlias = Array.from(body.props.props).filter(([, prop]) => prop.aliases.length > 0);
+  const propsWithAlias = Array.from(body.props.props).filter(([, prop]) => prop.needsAlias);
   if (propsWithAlias.length > 0) {
     // Expand this.props into variables.
     // E.g. const { foo, bar } = props;
@@ -137,7 +146,12 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
         t.objectPattern(propsWithAlias.map(([name, prop]) =>
           t.objectProperty(
             t.identifier(name),
-            t.identifier(prop.newAliasName!),
+            prop.defaultValue
+            ? t.assignmentPattern(
+              t.identifier(prop.newAliasName!),
+              prop.defaultValue.node
+            )
+            : t.identifier(prop.newAliasName!),
             false,
             name === prop.newAliasName!,
           ),

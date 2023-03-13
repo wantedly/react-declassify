@@ -2,6 +2,9 @@
 
 - Added
   - Add support for `this.state` initialization in constructor
+  - Add support for `defaultProps`
+- Misc
+  - Heavily refactored internal analysis
 
 ## 0.1.2
 
