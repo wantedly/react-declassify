@@ -2,7 +2,7 @@ import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ObjectProperty, ThisExpression, TSDeclareMethod } from "@babel/types";
 import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
-import type { ThisFieldSite } from "./sites.js";
+import type { ThisFieldSite } from "./this_fields.js";
 
 export type StateObjAnalysis = Map<string, StateAnalysis>;
 

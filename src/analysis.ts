@@ -2,7 +2,7 @@ import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
-import { analyzeThisFields } from "./analysis/sites.js";
+import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState } from "./analysis/state.js";
 import { isClassMethodLike, memberName, memberRefName } from "./utils.js";
 
