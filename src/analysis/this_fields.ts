@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod } from "@babel/types";
-import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
+import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
 export type ThisFields = {
@@ -43,19 +43,9 @@ export type StaticFieldSite = {
 
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
   const thisFields = new Map<string, ThisFieldSite[]>();
-  function getThisField(name: string): ThisFieldSite[] {
-    if (!thisFields.has(name)) {
-      thisFields.set(name, []);
-    }
-    return thisFields.get(name)!;
-  }
+  const getThisField = (name: string) => getOr(thisFields, name, () => []);
   const staticFields = new Map<string, StaticFieldSite[]>();
-  function getStaticField(name: string): StaticFieldSite[] {
-    if (!staticFields.has(name)) {
-      staticFields.set(name, []);
-    }
-    return staticFields.get(name)!;
-  }
+  const getStaticField = (name: string) => getOr(staticFields, name, () => []);
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {

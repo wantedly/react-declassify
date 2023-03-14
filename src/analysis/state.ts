@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ObjectProperty, ThisExpression, TSDeclareMethod } from "@babel/types";
-import { isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
+import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { ThisFieldSite } from "./this_fields.js";
 
@@ -33,14 +33,9 @@ export function analyzeState(
   setStateSites: ThisFieldSite[],
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
-  function getState(name: string): StateAnalysis {
-    if (!states.has(name)) {
-      states.set(name, {
-        sites: [],
-      });
-    }
-    return states.get(name)!;
-  }
+  const getState = (name: string) => getOr(states, name, () => ({
+    sites: [],
+  }));
 
   const init = stateObjSites.find((site) => site.init);
   if (init) {

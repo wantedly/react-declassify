@@ -1,6 +1,22 @@
 import type { NodePath, PluginPass } from "@babel/core";
 import type { ArrayPattern, AssignmentPattern, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, ObjectMethod, ObjectPattern, ObjectProperty, RestElement, StaticBlock, StringLiteral, TSDeclareMethod, TSTypeAnnotation } from "@babel/types";
 
+export function getOr<K, V>(m: Map<K, V>, k: K, getDefault: () => V): V {
+  if (m.has(k)) {
+    return m.get(k)!;
+  } else {
+    const v = getDefault();
+    m.set(k, v);
+    return v;
+  }
+}
+
+export function getAndDelete<K, V>(m: Map<K, V>, k: K): V | undefined {
+  const v = m.get(k);
+  m.delete(k);
+  return v;
+}
+
 export function memberName(member: ClassMethod | ClassPrivateMethod | ClassProperty | ClassPrivateProperty | ClassAccessorProperty | TSDeclareMethod | ObjectMethod | ObjectProperty): string | undefined {
   const computed = member.type === "ClassPrivateMethod" || member.type === "ClassPrivateProperty"
     ? false

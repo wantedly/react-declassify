@@ -4,7 +4,7 @@ import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMe
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState } from "./analysis/state.js";
-import { isClassMethodLike, memberName, memberRefName } from "./utils.js";
+import { getAndDelete, getOr, isClassMethodLike, memberName, memberRefName } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 
 export { AnalysisError } from "./analysis/error.js";
@@ -72,15 +72,11 @@ export type StateField = {
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
-  const propsObjSites = sites.get("props") ?? [];
-  sites.delete("props");
-  const defaultPropsObjSites = staticFields.get("defaultProps") ?? [];
-  staticFields.delete("defaultProps");
+  const propsObjSites = getAndDelete(sites, "props") ?? [];
+  const defaultPropsObjSites = getAndDelete(staticFields, "defaultProps") ?? [];
 
-  const stateObjSites = sites.get("state") ?? [];
-  sites.delete("state");
-  const setStateSites = sites.get("setState") ?? [];
-  sites.delete("setState");
+  const stateObjSites = getAndDelete(sites, "state") ?? [];
+  const setStateSites = getAndDelete(sites, "setState") ?? [];
   const states = analyzeState(stateObjSites, setStateSites);
 
   const locals = analyzeOuterCapturings(path);
@@ -277,12 +273,11 @@ function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<stri
 }
 
 function ensureState(state: Map<string, StateField>, name: string, babel: typeof import("@babel/core"), locals: Set<string>): StateField {
-  if (!state.has(name)) {
+  return getOr(state, name, () => {
     const localName = newLocal(name, babel, locals);
     const localSetterName = newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, babel, locals);
-    state.set(name, { localName, localSetterName });
-  }
-  return state.get(name)!;
+    return { localName, localSetterName };
+  });
 }
 
 function newLocal(baseName: string, babel: typeof import("@babel/core"), locals: Set<string>): string {

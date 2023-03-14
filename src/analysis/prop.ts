@@ -1,7 +1,7 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type { Expression, LVal, MemberExpression } from "@babel/types";
-import { memberName, memberRefName } from "../utils.js";
+import { getOr, memberName, memberRefName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
 
@@ -58,16 +58,11 @@ export function analyzeProps(
   const defaultProps = analyzeDefaultProps(defaultPropsObjSites);
   const newObjSites: PropsObjSite[] = [];
   const props = new Map<string, PropAnalysis>();
-  function getProp(name: string): PropAnalysis {
-    if (!props.has(name)) {
-      props.set(name, {
-        sites: [],
-        aliases: [],
-        needsAlias: false,
-      });
-    }
-    return props.get(name)!;
-  }
+  const getProp = (name: string) => getOr(props, name, () => ({
+    sites: [],
+    aliases: [],
+    needsAlias: false,
+  }));
 
   function analyzePropAliasing(memPath: NodePath<MemberExpression>): { fullyDecomposed: boolean } {
     let fullyDecomposed = true;
