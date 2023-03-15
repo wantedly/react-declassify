@@ -1885,9 +1885,9 @@ __metadata:
   linkType: hard
 
 "@qnighy/dedent@npm:^0.1.0":
-  version: 0.1.0
-  resolution: "@qnighy/dedent@npm:0.1.0"
-  checksum: 3376f6c7d5f5733ec69cb1bcfbba9e395ac2feca59ad441b37f6396a2fbb77105c8d32d35621fd1fc65858f87241f4374cb81bdc7079f15005fd993d5b0d1431
+  version: 0.1.1
+  resolution: "@qnighy/dedent@npm:0.1.1"
+  checksum: 42a8aa62b48134b23a94a7d255dd9fc760a4ee7f40bf8f97564eb3f577e52a9b0a7746856dec8e68bad69a6bc521ac8da89a71031b0ca8ba2e5a68b75540e18f
   languageName: node
   linkType: hard
 
