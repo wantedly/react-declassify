@@ -4,6 +4,7 @@ import type { Expression, LVal, MemberExpression } from "@babel/types";
 import { getOr, memberName, memberRefName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
+import { trackMember } from "./track_member.js";
 
 export type PropsObjAnalysis = {
   hasDefaults: boolean;
@@ -64,77 +65,6 @@ export function analyzeProps(
     needsAlias: false,
   }));
 
-  function analyzePropAliasing(memPath: NodePath<MemberExpression>): { fullyDecomposed: boolean } {
-    let fullyDecomposed = true;
-    if (
-      memPath.parentPath.isMemberExpression()
-      && memPath.parentPath.node.object === memPath.node
-      && memPath.parentPath.parentPath.isVariableDeclarator()
-      && memPath.parentPath.parentPath.node.init === memPath.parentPath.node
-    ) {
-      const propPath = memPath.parentPath;
-      const declaratorPath = memPath.parentPath.parentPath;
-      const declarationPath = memPath.parentPath.parentPath.parentPath;
-      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
-        return { fullyDecomposed: false };
-      }
-      const lval = declaratorPath.get("id");
-      if (!lval.isIdentifier()) {
-        return { fullyDecomposed: false };
-      }
-      const propName = memberRefName(propPath.node);
-      if (propName == null) {
-        return { fullyDecomposed: false };
-      }
-      // const foo = this.props.foo;
-      const prop = getProp(propName);
-      prop.aliases.push({
-        scope: memPath.scope,
-        localName: lval.node.name,
-        path: lval,
-      });
-    } else if (
-      memPath.parentPath.isVariableDeclarator()
-      && memPath.parentPath.node.init === memPath.node
-    ) {
-      const declaratorPath = memPath.parentPath;
-      const declarationPath = memPath.parentPath.parentPath;
-      if (!declarationPath.isVariableDeclaration() || declarationPath.node.kind !== "const") {
-        return { fullyDecomposed: false };
-      }
-      const lval = declaratorPath.get("id");
-      if (!lval.isObjectPattern()) {
-        return { fullyDecomposed: false };
-      }
-
-      // const { foo } = this.props;
-      for (const lvprop of lval.get("properties")) {
-        if (!lvprop.isObjectProperty()) {
-          fullyDecomposed = false;
-          break;
-        }
-        const propName = memberName(lvprop.node);
-        if (propName == null) {
-          fullyDecomposed = false;
-          break;
-        }
-        const prop = getProp(propName);
-        if (lvprop.node.value.type === "Identifier") {
-          prop.aliases.push({
-            scope: memPath.scope,
-            localName: lvprop.node.value.name,
-            path: lvprop.get("value") as NodePath<LVal>,
-          });
-        } else {
-          fullyDecomposed = false;
-        }
-      }
-    } else {
-      fullyDecomposed = false;
-    }
-    return { fullyDecomposed };
-  }
-
   for (const site of propsObjSites) {
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.props`);
@@ -142,20 +72,21 @@ export function analyzeProps(
     newObjSites.push({
       path: site.path,
     });
-    const { fullyDecomposed } = analyzePropAliasing(site.path);
-    if (fullyDecomposed) {
-      continue;
-    }
-    if (defaultProps) {
-      const propAccess = site.path.parentPath;
-      if (!propAccess.isMemberExpression()) {
-        throw new AnalysisError(`Stray this.props in presence of defaultProps`);
+    const memberAnalysis = trackMember(site.path);
+    if (memberAnalysis.fullyDecomposed && memberAnalysis.memberAliases) {
+      for (const [name, aliasing] of memberAnalysis.memberAliases) {
+        getProp(name).aliases.push({
+          scope: aliasing.scope,
+          localName: aliasing.localName,
+          path: aliasing.idPath,
+        });
       }
-      const propName = memberRefName(propAccess.node);
-      if (propName == null) {
+    } else if (defaultProps) {
+      if (memberAnalysis.memberExpr) {
+        getProp(memberAnalysis.memberExpr.name).sites.push({ path: memberAnalysis.memberExpr.path });
+      } else {
         throw new AnalysisError(`Non-analyzable this.props in presence of defaultProps`);
       }
-      getProp(propName).sites.push({ path: propAccess });
     }
   }
   if (defaultProps) {
