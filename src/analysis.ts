@@ -6,6 +6,7 @@ import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete, getOr, isClassMethodLike, memberName, memberRefName } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
+import { LocalManager, RemovableNode } from "./analysis/local.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -14,6 +15,8 @@ export type {
   RefInfo
 } from "./analysis/head.js";
 export { analyzeHead } from "./analysis/head.js";
+export type { LocalManager } from "./analysis/local.js";
+export type { StateObjAnalysis } from "./analysis/state.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -56,6 +59,7 @@ const SPECIAL_STATIC_NAMES = new Set<string>([
 ]);
 
 export type ComponentBody = {
+  locals: LocalManager,
   render: RenderAnalysis;
   state: StateObjAnalysis;
   members: Map<string, MethodAnalysis>;
@@ -64,6 +68,7 @@ export type ComponentBody = {
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
+  const locals2 = new LocalManager();
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
   const propsObjSites = getAndDelete(sites, "props") ?? [];
@@ -71,7 +76,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
 
   const stateObjSites = getAndDelete(sites, "state") ?? [];
   const setStateSites = getAndDelete(sites, "setState") ?? [];
-  const states = analyzeState(stateObjSites, setStateSites);
+  const states = analyzeState(stateObjSites, setStateSites, locals2);
 
   const locals = analyzeOuterCapturings(path);
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
@@ -139,7 +144,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     }
   }
 
-  const render = analyzeRender(renderPath, babel, locals, props);
+  const render = analyzeRender(renderPath, babel, locals, props, locals2);
 
   for (const [name, stateAnalysis] of states.entries()) {
     stateAnalysis.localName = newLocal(name, babel, locals);
@@ -147,6 +152,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   }
 
   return {
+    locals: locals2,
     render,
     state: states,
     members,
@@ -171,13 +177,21 @@ function analyzeRender(
   babel: typeof import("@babel/core"),
   locals: Set<string>,
   props: PropsObjAnalysis,
+  locals2: LocalManager,
 ): RenderAnalysis {
+  console.log("locals2 =", locals2);
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
     if (
       props.allAliases.some((alias) => alias.scope === binding.scope && alias.localName === name)
     ) {
       // Already handled as a prop alias
+      continue;
+    }
+    if (
+      locals2.allRemovePaths.has(binding.path as NodePath<RemovableNode>)
+    ) {
+      // Already handled as an alias
       continue;
     }
     const newName = newLocal(name, babel, locals);

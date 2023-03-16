@@ -2,7 +2,9 @@ import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ObjectProperty, ThisExpression, TSDeclareMethod } from "@babel/types";
 import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
+import type { LocalManager } from "./local.js";
 import type { ThisFieldSite } from "./this_fields.js";
+import { trackMember } from "./track_member.js";
 
 export type StateObjAnalysis = Map<string, StateAnalysis>;
 
@@ -22,7 +24,7 @@ export type StateInitSite = {
 };
 export type StateExprSite = {
   type: "expr";
-  path: NodePath<MemberExpression>;
+  path: NodePath<Expression>;
 };
 export type SetStateSite = {
   type: "setState";
@@ -33,6 +35,7 @@ export type SetStateSite = {
 export function analyzeState(
   stateObjSites: ThisFieldSite[],
   setStateSites: ThisFieldSite[],
+  locals: LocalManager,
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
   const getState = (name: string) => getOr(states, name, () => ({
@@ -76,19 +79,29 @@ export function analyzeState(
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.state`);
     }
-    const gpPath = site.path.parentPath;
-    if (!gpPath.isMemberExpression()) {
-      throw new AnalysisError(`Stray this.state`);
+    const memberAnalysis = trackMember(site.path);
+    if (memberAnalysis.fullyDecomposed && memberAnalysis.memberAliases) {
+      for (const [name, aliasInfo] of memberAnalysis.memberAliases) {
+        const binding = aliasInfo.scope.getBinding(aliasInfo.localName)!;
+        locals.reserveRemoval(binding.path);
+        for (const path of binding.referencePaths) {
+          if (!path.isExpression()) {
+            throw new Error("referencePath contains non-Expression");
+          }
+          getState(name).sites.push({
+            type: "expr",
+            path,
+          });
+        }
+      }
+    } else if (memberAnalysis.memberExpr) {
+      getState(memberAnalysis.memberExpr.name).sites.push({
+        type: "expr",
+        path: memberAnalysis.memberExpr.path,
+      });
+    } else {
+      throw new AnalysisError(`Non-analyzable this.state`);
     }
-    const stateName = memberRefName(gpPath.node);
-    if (stateName == null) {
-      throw new AnalysisError(`Non-analyzable state name`);
-    }
-    const state = getState(stateName);
-    state.sites.push({
-      type: "expr",
-      path: gpPath,
-    });
   }
   for (const site of setStateSites) {
     if (site.type !== "expr" || site.hasWrite) {

@@ -540,6 +540,25 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("transforms state decomposition", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            const { foo, bar } = this.state;
+            return foo + bar;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const [foo, setFoo] = React.useState();
+          const [bar, setBar] = React.useState();
+          return foo + bar;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   it("transforms props", () => {

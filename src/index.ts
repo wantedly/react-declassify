@@ -85,6 +85,9 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   const { types: t } = babel;
   const { ts } = options;
 
+  for (const path of body.locals.removePaths) {
+    path.remove();
+  }
   for (const alias of body.props.allAliases) {
     // Remove assignments of this.props.
     // We re-add them later to achieve hoisting.
