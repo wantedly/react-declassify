@@ -179,7 +179,6 @@ function analyzeRender(
   props: PropsObjAnalysis,
   locals2: LocalManager,
 ): RenderAnalysis {
-  console.log("locals2 =", locals2);
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
     if (
