@@ -118,19 +118,24 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       site.path.replaceWith(site.path.node.property);
     }
   }
+  for (const [name, stateAnalysis] of body.state) {
+    for (const site of stateAnalysis.sites) {
+      if (site.type === "expr") {
+        // this.state.foo -> foo
+        site.path.replaceWith(t.identifier(stateAnalysis.localName!));
+      } else if (site.type === "setState") {
+        // this.setState({ foo: 1 }) -> setFoo(1)
+        site.path.replaceWith(
+          t.callExpression(
+            t.identifier(stateAnalysis.localSetterName!),
+            [site.valuePath.node]
+          )
+        );
+      }
+    }
+  }
   for (const tr of body.thisRefs) {
-    if (tr.kind === "state") {
-      // this.state.foo -> foo
-      tr.path.replaceWith(t.identifier(tr.field.localName));
-    } else if (tr.kind === "setState") {
-      // this.setState({ foo: 1 }) -> setFoo(1)
-      tr.path.replaceWith(
-        t.callExpression(
-          t.identifier(tr.field.localSetterName),
-          [tr.rhs.node]
-        )
-      );
-    } else if (tr.kind === "userDefined") {
+    if (tr.kind === "userDefined") {
       // this.foo -> foo
       tr.path.replaceWith(tr.path.node.property);
     }
@@ -165,12 +170,12 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     preamble.push(t.variableDeclaration("const", [
       t.variableDeclarator(
         t.arrayPattern([
-          t.identifier(field.localName),
-          t.identifier(field.localSetterName),
+          t.identifier(field.localName!),
+          t.identifier(field.localSetterName!),
         ]),
         t.callExpression(
           getReactImport("useState", babel, head.superClassRef),
-          field.init ? [field.init.node] : []
+          field.init ? [field.init.valuePath.node] : []
         )
       )
     ]))

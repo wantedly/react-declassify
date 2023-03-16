@@ -7,6 +7,8 @@ import type { ThisFieldSite } from "./this_fields.js";
 export type StateObjAnalysis = Map<string, StateAnalysis>;
 
 export type StateAnalysis = {
+  localName?: string | undefined;
+  localSetterName?: string | undefined;
   init?: StateInitSite | undefined;
   sites: StateSite[];
 };

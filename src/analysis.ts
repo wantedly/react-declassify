@@ -3,7 +3,7 @@ import type { Scope } from "@babel/traverse";
 import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/this_fields.js";
-import { analyzeState } from "./analysis/state.js";
+import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete, getOr, isClassMethodLike, memberName, memberRefName } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 
@@ -57,16 +57,10 @@ const SPECIAL_STATIC_NAMES = new Set<string>([
 
 export type ComponentBody = {
   render: RenderAnalysis;
-  state: Map<string, StateField>;
+  state: StateObjAnalysis;
   members: Map<string, MethodAnalysis>;
   thisRefs: ThisRef[];
   props: PropsObjAnalysis;
-};
-
-export type StateField = {
-  init?: NodePath<Expression>;
-  localName: string;
-  localSetterName: string;
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
@@ -147,35 +141,14 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
 
   const render = analyzeRender(renderPath, babel, locals, props);
 
-  const stateMap = new Map<string, StateField>();
   for (const [name, stateAnalysis] of states.entries()) {
-    const field = ensureState(stateMap, name, babel, locals);
-    if (stateAnalysis.init) {
-      field.init = stateAnalysis.init.valuePath;
-    }
-    for (const site of stateAnalysis.sites) {
-      if (site.type === "state_init") {
-        // do nothing
-      } else if (site.type === "expr") {
-        thisRefs.push({
-          kind: "state",
-          path: site.path,
-          field,
-        });
-      } else {
-        thisRefs.push({
-          kind: "setState",
-          path: site.path,
-          field,
-          rhs: site.valuePath,
-        });
-      }
-    }
+    stateAnalysis.localName = newLocal(name, babel, locals);
+    stateAnalysis.localSetterName = newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, babel, locals);
   }
 
   return {
     render,
-    state: stateMap,
+    state: states,
     members,
     thisRefs,
     props,
@@ -234,15 +207,6 @@ function analyzeFuncDef(initPath: NodePath<FunctionExpression | ArrowFunctionExp
 }
 
 export type ThisRef = {
-  kind: "state",
-  path: NodePath<MemberExpression>;
-  field: StateField,
-} | {
-  kind: "setState",
-  path: NodePath<CallExpression>;
-  field: StateField,
-  rhs: NodePath<Expression>,
-} | {
   kind: "userDefined";
   path: NodePath<MemberExpression>;
   name: string;
@@ -270,14 +234,6 @@ function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<stri
     }
   });
   return capturings;
-}
-
-function ensureState(state: Map<string, StateField>, name: string, babel: typeof import("@babel/core"), locals: Set<string>): StateField {
-  return getOr(state, name, () => {
-    const localName = newLocal(name, babel, locals);
-    const localSetterName = newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, babel, locals);
-    return { localName, localSetterName };
-  });
 }
 
 function newLocal(baseName: string, babel: typeof import("@babel/core"), locals: Set<string>): string {
