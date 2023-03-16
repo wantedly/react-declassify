@@ -1,9 +1,15 @@
+## Unreleased
+
+- Added
+  - Add support for `const { ... } = this.state`
+- Misc
+  - Refactoring
+
 ## 0.1.3
 
 - Added
   - Add support for `this.state` initialization in constructor
   - Add support for `defaultProps`
-  - Add support for `const { ... } = this.state`
 - Misc
   - Heavily refactored internal analysis
 
