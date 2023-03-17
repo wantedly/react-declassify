@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.4
+
 - Added
   - Add support for `const { ... } = this.state`
   - Rename methods if necessary
