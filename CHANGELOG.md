@@ -2,6 +2,8 @@
 
 - Added
   - Add support for refs
+- Fixed
+  - Keep generator/async flags
 
 ## 0.1.4
 

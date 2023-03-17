@@ -203,6 +203,8 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
           t.identifier(field.localName!),
           methNode.params as (Identifier | RestElement | Pattern)[],
           methNode.body,
+          methNode.generator,
+          methNode.async,
         ));
       } else {
         const methNode = field.init.initPath.node;
@@ -215,12 +217,16 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
               : t.blockStatement([
                 t.returnStatement(methNode.body)
               ]),
+            methNode.generator,
+            methNode.async,
           ));
         } else {
           preamble.push(t.functionDeclaration(
             t.identifier(field.localName!),
             methNode.params,
             methNode.body,
+            methNode.generator,
+            methNode.async,
           ));
         }
       }
