@@ -133,11 +133,23 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     }
   }
   for (const [, field] of body.userDefined.fields) {
-    if (field.type === "user_defined_function") {
+    if (field.type === "user_defined_function" || field.type === "user_defined_ref") {
       for (const site of field.sites) {
         if (site.type === "expr") {
           // this.foo -> foo
           site.path.replaceWith(t.identifier(field.localName!));
+        }
+      }
+    } else if (field.type === "user_defined_direct_ref") {
+      for (const site of field.sites) {
+        if (site.type === "expr") {
+          // this.foo -> foo.current
+          site.path.replaceWith(
+            t.memberExpression(
+              t.identifier(field.localName!),
+              t.identifier("current")
+            )
+          );
         }
       }
     }
@@ -212,6 +224,30 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
           ));
         }
       }
+    } else if (field.type === "user_defined_ref") {
+      // const foo = useRef(null);
+      preamble.push(t.variableDeclaration(
+        "const",
+        [t.variableDeclarator(
+          t.identifier(field.localName!),
+          t.callExpression(
+            getReactImport("useRef", babel, head.superClassRef),
+            [t.nullLiteral()]
+          ),
+        )]
+      ))
+    } else if (field.type === "user_defined_direct_ref") {
+      // const foo = useRef(init);
+      preamble.push(t.variableDeclaration(
+        "const",
+        [t.variableDeclarator(
+          t.identifier(field.localName!),
+          t.callExpression(
+            getReactImport("useRef", babel, head.superClassRef),
+            [field.init.node]
+          ),
+        )]
+      ))
     }
   }
   const bodyNode = body.render.path.node.body;

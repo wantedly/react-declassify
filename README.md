@@ -94,8 +94,8 @@ export const C = props => {
   - [ ] Support functional updates
   - [ ] Support lazy initialization
 - [ ] Support for refs
-  - [ ] Transform `createRef` to `useRef`
-  - [ ] Transform member assignment to `useRef`
+  - [x] Transform `createRef` to `useRef`
+  - [x] Transform member assignment to `useRef`
   - [ ] Transform legacy string refs as far as possible
 - [ ] Support for lifecycles
   - [ ] Transform componentDidMount, componentDidUpdate, and componentWillUnmount

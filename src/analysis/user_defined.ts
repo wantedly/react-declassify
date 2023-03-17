@@ -1,7 +1,8 @@
 import type { NodePath } from "@babel/core";
-import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, FunctionExpression } from "@babel/types";
+import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionExpression } from "@babel/types";
 import { isClassMethodLike } from "../utils.js";
 import { AnalysisError } from "./error.js";
+import { analyzeLibRef, isReactRef } from "./lib.js";
 import type { ThisFieldSite } from "./this_fields.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
@@ -40,10 +41,21 @@ export type UserDefinedAnalysis = {
 };
 
 export type UserDefined =
-  // | UserDefinedRef
-  // | UserDefinedDirectRef
+  | UserDefinedRef
+  | UserDefinedDirectRef
   | UserDefinedFn;
 
+export type UserDefinedRef = {
+  type: "user_defined_ref";
+  localName?: string | undefined;
+  sites: ThisFieldSite[];
+};
+export type UserDefinedDirectRef = {
+  type: "user_defined_direct_ref";
+  localName?: string | undefined;
+  init: NodePath<Expression>;
+  sites: ThisFieldSite[];
+};
 export type UserDefinedFn = {
   type: "user_defined_function";
   localName?: string | undefined;
@@ -68,6 +80,8 @@ export function analyzeUserDefined(
       throw new AnalysisError(`Cannot transform ${name}`);
     }
     let fnInit: FnInit | undefined = undefined;
+    let isRefInit = false;
+    let valInit: NodePath<Expression> | undefined = undefined;
     const initSite = fieldSites.find((site) => site.init);
     if (initSite) {
       const init = initSite.init!;
@@ -84,6 +98,19 @@ export function analyzeUserDefined(
             initPath,
           };
         }
+
+        if (initPath.isCallExpression()) {
+          const initFn = initPath.get("callee") as NodePath<Expression>;
+          const initArgs = initPath.get("arguments");
+          const initRef = analyzeLibRef(initFn);
+          if (initRef && isReactRef(initRef) && initRef.name === "createRef") {
+            if (initArgs.length > 0) {
+              throw new AnalysisError("Extra arguments to createRef");
+            }
+            isRefInit = true;
+          }
+        }
+        valInit = initPath;
       }
     }
     const hasWrite = fieldSites.some((site) => site.hasWrite);
@@ -93,8 +120,19 @@ export function analyzeUserDefined(
         init: fnInit,
         sites: fieldSites,
       });
+    } else if (isRefInit && !hasWrite) {
+      fields.set(name, {
+        type: "user_defined_ref",
+        sites: fieldSites,
+      });
+    } else if (valInit) {
+      fields.set(name, {
+        type: "user_defined_direct_ref",
+        init: valInit,
+        sites: fieldSites,
+      });
     } else {
-      throw new AnalysisError("Not implemented yet: ref");
+      throw new AnalysisError(`Cannot transform this.${name}`);
     }
   }
   return { fields };

@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Added
+  - Add support for refs
+
 ## 0.1.4
 
 - Added

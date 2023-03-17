@@ -587,6 +587,96 @@ describe("react-declassify", () => {
     });
   });
 
+  describe("Ref transformation", () => {
+    it("transforms createRef as useRef", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+            this.div = React.createRef();
+          }
+
+          foo() {
+            console.log(this.div.current);
+          }
+
+          render() {
+            return <div ref={this.div} />;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          function foo() {
+            console.log(div.current);
+          }
+
+          const div = React.useRef(null);
+          return <div ref={div} />;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("transforms class field as useRef", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+            this.div = null;
+          }
+
+          foo() {
+            console.log(this.div);
+          }
+
+          render() {
+            return <div ref={(elem) => this.div = elem} />;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          function foo() {
+            console.log(div.current);
+          }
+
+          const div = React.useRef(null);
+          return <div ref={(elem) => div.current = elem} />;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("transforms ref initializer", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          counter = 42
+
+          foo() {
+            console.log(this.counter++);
+          }
+
+          render() {
+            return null;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const counter = React.useRef(42);
+
+          function foo() {
+            console.log(counter.current++);
+          }
+
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   it("transforms props", () => {
     const input = dedent`\
       class C extends React.Component {
