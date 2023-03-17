@@ -1,5 +1,5 @@
 import type { NodePath, PluginPass } from "@babel/core";
-import type { ArrayPattern, AssignmentPattern, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, MemberExpression, ObjectMethod, ObjectPattern, ObjectProperty, RestElement, StaticBlock, StringLiteral, TSDeclareMethod, TSTypeAnnotation } from "@babel/types";
+import type { ArrayPattern, AssignmentPattern, CallExpression, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, JSXOpeningElement, MemberExpression, NewExpression, ObjectMethod, ObjectPattern, ObjectProperty, OptionalCallExpression, RestElement, StaticBlock, StringLiteral, TaggedTemplateExpression, TSDeclareMethod, TSExpressionWithTypeArguments, TSImportType, TSInstantiationExpression, TSMethodSignature, TSPropertySignature, TSTypeAnnotation, TSTypeParameterInstantiation, TSTypeQuery, TSTypeReference } from "@babel/types";
 
 export function getOr<K, V>(m: Map<K, V>, k: K, getDefault: () => V): V {
   if (m.has(k)) {
@@ -17,7 +17,7 @@ export function getAndDelete<K, V>(m: Map<K, V>, k: K): V | undefined {
   return v;
 }
 
-export function memberName(member: ClassMethod | ClassPrivateMethod | ClassProperty | ClassPrivateProperty | ClassAccessorProperty | TSDeclareMethod | ObjectMethod | ObjectProperty): string | undefined {
+export function memberName(member: ClassMethod | ClassPrivateMethod | ClassProperty | ClassPrivateProperty | ClassAccessorProperty | TSDeclareMethod | ObjectMethod | ObjectProperty | TSPropertySignature | TSMethodSignature): string | undefined {
   const computed = member.type === "ClassPrivateMethod" || member.type === "ClassPrivateProperty"
     ? false
     : member.computed;
@@ -93,5 +93,17 @@ export function assignTypeAnnotation<T extends Annotatable>(
 ): T {
   return Object.assign(node, {
     typeAnnotation,
+  });
+}
+
+type Paramable =
+  CallExpression | NewExpression | TaggedTemplateExpression | OptionalCallExpression | JSXOpeningElement | TSTypeReference | TSTypeQuery | TSExpressionWithTypeArguments | TSInstantiationExpression | TSImportType;
+
+export function assignTypeParameters<T extends Paramable>(
+  node: T,
+  typeParameters: TSTypeParameterInstantiation | null | undefined,
+): T {
+  return Object.assign(node, {
+    typeParameters,
   });
 }

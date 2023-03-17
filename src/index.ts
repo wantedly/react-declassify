@@ -1,7 +1,7 @@
 import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { assignTypeAnnotation, importName, isTS } from "./utils.js";
-import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, RefInfo } from "./analysis.js";
+import { assignTypeAnnotation, assignTypeParameters, importName, isTS } from "./utils.js";
+import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
 
@@ -19,7 +19,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         if (path.parentPath.isExportDefaultDeclaration()) {
           const declPath = path.parentPath;
           try {
-            const body = analyzeBody(path);
+            const body = analyzeBody(path, head);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             if (path.node.id) {
               declPath.replaceWithMultiple([
@@ -50,7 +50,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           }
         } else {
           try {
-            const body = analyzeBody(path);
+            const body = analyzeBody(path, head);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             path.replaceWith(t.variableDeclaration("const", [
               t.variableDeclarator(
@@ -181,16 +181,30 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   }
   for (const field of body.state.values()) {
     // State declarations
+    const call = t.callExpression(
+      getReactImport("useState", babel, head.superClassRef),
+      field.init ? [field.init.valuePath.node] : []
+    );
     preamble.push(t.variableDeclaration("const", [
       t.variableDeclarator(
         t.arrayPattern([
           t.identifier(field.localName!),
           t.identifier(field.localSetterName!),
         ]),
-        t.callExpression(
-          getReactImport("useState", babel, head.superClassRef),
-          field.init ? [field.init.valuePath.node] : []
-        )
+        ts && field.typeAnnotation ?
+          assignTypeParameters(
+            call,
+            t.tsTypeParameterInstantiation([
+              field.typeAnnotation.type === "method"
+              ? t.tsFunctionType(
+                  undefined,
+                  field.typeAnnotation.params.map((p) => p.node),
+                  t.tsTypeAnnotation(field.typeAnnotation.returnType.node)
+                )
+              : field.typeAnnotation.path.node
+            ])
+          )
+        : call
       )
     ]))
   }
@@ -290,7 +304,7 @@ function toTSEntity(
 function getReactImport(
   name: string,
   babel: typeof import("@babel/core"),
-  superClassRef: RefInfo
+  superClassRef: LibRef
 ): MemberExpression | Identifier {
   const { types: t } = babel;
   if (superClassRef.type === "global") {

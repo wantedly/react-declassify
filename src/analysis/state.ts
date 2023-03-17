@@ -1,7 +1,8 @@
 import type { NodePath } from "@babel/core";
-import type { CallExpression, Expression, ObjectProperty } from "@babel/types";
+import type { CallExpression, Expression, Identifier, ObjectProperty, RestElement, TSType } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
+import { ComponentHead } from "./head.js";
 import type { LocalManager } from "./local.js";
 import type { ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
@@ -12,6 +13,7 @@ export type StateAnalysis = {
   localName?: string | undefined;
   localSetterName?: string | undefined;
   init?: StateInitSite | undefined;
+  typeAnnotation?: StateTypeAnnotation;
   sites: StateSite[];
 };
 
@@ -32,10 +34,20 @@ export type SetStateSite = {
   valuePath: NodePath<Expression>;
 }
 
+export type StateTypeAnnotation = {
+  type: "simple";
+  path: NodePath<TSType>;
+} | {
+  type: "method";
+  params: NodePath<Identifier | RestElement>[];
+  returnType: NodePath<TSType>;
+};
+
 export function analyzeState(
   stateObjSites: ThisFieldSite[],
   setStateSites: ThisFieldSite[],
   locals: LocalManager,
+  head: ComponentHead,
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
   const getState = (name: string) => getOr(states, name, () => ({
@@ -137,6 +149,28 @@ export function analyzeState(
       });
     } else {
       throw new AnalysisError(`Non-analyzable setState`);
+    }
+  }
+  for (const [name, stateType] of head.states) {
+    const state = getState(name);
+    if (stateType.isTSPropertySignature()) {
+      const annot = stateType.get("typeAnnotation");
+      if (annot.isTSTypeAnnotation()) {
+        state.typeAnnotation = {
+          type: "simple",
+          path: annot.get("typeAnnotation"),
+        };
+      }
+    } else if (stateType.isTSMethodSignature()) {
+      const params = stateType.get("parameters");
+      const returnAnnot = stateType.get("typeAnnotation");
+      if (returnAnnot.isTSTypeAnnotation()) {
+        state.typeAnnotation = {
+          type: "method",
+          params,
+          returnType: returnAnnot.get("typeAnnotation"),
+        }
+      }
     }
   }
   for (const [name, state] of states.entries()) {

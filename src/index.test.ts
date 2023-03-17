@@ -568,6 +568,37 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("transforms state types", () => {
+      const input = dedent`\
+        type State = {
+          foo: number,
+          bar: number,
+        };
+        class C extends React.Component<{}, State> {
+          state = {
+            foo: 1,
+            bar: 2,
+          };
+          render() {
+            return <button onClick={() => this.setState({ bar: 3 })}>{this.state.foo}</button>;
+          }
+        }
+      `;
+      const output = dedent`\
+        type State = {
+          foo: number,
+          bar: number,
+        };
+
+        const C: React.FC<{}> = () => {
+          const [foo, setFoo] = React.useState<number>(1);
+          const [bar, setBar] = React.useState<number>(2);
+          return <button onClick={() => setBar(3)}>{foo}</button>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
     it("transforms state decomposition", () => {
       const input = dedent`\
         class C extends React.Component {

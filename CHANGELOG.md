@@ -2,6 +2,7 @@
 
 - Added
   - Add support for refs
+  - Add support for state types
 - Fixed
   - Keep generator/async flags
   - Fix renaming failure in some cases

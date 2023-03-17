@@ -8,12 +8,13 @@ import { getAndDelete } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
+import { ComponentHead } from "./analysis/head.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
+export type { LibRef } from "./analysis/lib.js";
 export type {
-  ComponentHead,
-  RefInfo
+  ComponentHead
 } from "./analysis/head.js";
 export { analyzeHead } from "./analysis/head.js";
 export type { LocalManager } from "./analysis/local.js";
@@ -37,7 +38,10 @@ export type ComponentBody = {
   userDefined: UserDefinedAnalysis;
 };
 
-export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
+export function analyzeBody(
+  path: NodePath<ClassDeclaration>,
+  head: ComponentHead
+): ComponentBody {
   const locals = new LocalManager();
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
@@ -46,7 +50,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
 
   const stateObjSites = getAndDelete(sites, "state") ?? [];
   const setStateSites = getAndDelete(sites, "setState") ?? [];
-  const states = analyzeState(stateObjSites, setStateSites, locals);
+  const states = analyzeState(stateObjSites, setStateSites, locals, head);
 
   const renderSites = getAndDelete(sites, "render") ?? [];
 
