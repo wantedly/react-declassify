@@ -144,7 +144,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
     }
   }
 
-  const render = analyzeRender(renderPath, babel, locals, props, locals2);
+  const render = analyzeRender(renderPath, babel, locals, locals2);
 
   for (const [name, stateAnalysis] of states.entries()) {
     stateAnalysis.localName = newLocal(name, babel, locals);
@@ -176,17 +176,10 @@ function analyzeRender(
   path: NodePath<ClassMethod>,
   babel: typeof import("@babel/core"),
   locals: Set<string>,
-  props: PropsObjAnalysis,
   locals2: LocalManager,
 ): RenderAnalysis {
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
-    if (
-      props.allAliases.some((alias) => alias.scope === binding.scope && alias.localName === name)
-    ) {
-      // Already handled as a prop alias
-      continue;
-    }
     if (
       locals2.allRemovePaths.has(binding.path as NodePath<RemovableNode>)
     ) {
