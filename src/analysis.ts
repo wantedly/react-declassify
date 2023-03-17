@@ -1,10 +1,10 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ArrowFunctionExpression, CallExpression, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, FunctionExpression, Identifier, JSXIdentifier, MemberExpression, ThisExpression } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Identifier, JSXIdentifier } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
-import { getAndDelete, getOr, isClassMethodLike, memberName, memberRefName } from "./utils.js";
+import { getAndDelete } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
@@ -133,28 +133,6 @@ function analyzeRender(
   }
   return { path, renames };
 }
-
-export type MethodAnalysis = {
-  type: "method";
-  path: NodePath<ClassMethod | ClassPrivateMethod>;
-} | {
-  type: "func_def";
-  initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
-};
-
-function analyzeMethod(path: NodePath<ClassMethod | ClassPrivateMethod>): MethodAnalysis {
-  return { type: "method", path };
-}
-
-function analyzeFuncDef(initPath: NodePath<FunctionExpression | ArrowFunctionExpression>): MethodAnalysis {
-  return { type: "func_def", initPath };
-}
-
-export type ThisRef = {
-  kind: "userDefined";
-  path: NodePath<MemberExpression>;
-  name: string;
-};
 
 function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>, locals: LocalManager): Set<string> {
   const capturings = new Set<string>();

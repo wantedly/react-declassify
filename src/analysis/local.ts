@@ -1,7 +1,7 @@
 import type { NodePath } from "@babel/core";
 import type { ObjectProperty, RestElement, VariableDeclaration, VariableDeclarator } from "@babel/types";
 
-const RE_IDENT = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200C\u200D]*$/u;
+// const RE_IDENT = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200C\u200D]*$/u;
 const RESERVED: ReadonlySet<string> = new Set<string>([
   // Pure reserved words
   "break",

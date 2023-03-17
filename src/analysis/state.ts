@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
-import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ObjectProperty, ThisExpression, TSDeclareMethod } from "@babel/types";
-import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
+import type { CallExpression, Expression, ObjectProperty } from "@babel/types";
+import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
 import type { ThisFieldSite } from "./this_fields.js";

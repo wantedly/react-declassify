@@ -1,4 +1,4 @@
-import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, LVal, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
+import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignTypeAnnotation, importName, isTS } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, RefInfo } from "./analysis.js";

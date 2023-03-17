@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { Expression, Identifier, MemberExpression, VariableDeclarator } from "@babel/types";
+import type { Expression, Identifier, MemberExpression } from "@babel/types";
 import { memberName, memberRefName } from "../utils.js";
 
 export type ObjectExpressionAnalysis = {

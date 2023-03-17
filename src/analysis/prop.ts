@@ -1,7 +1,7 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { Expression, LVal, MemberExpression } from "@babel/types";
-import { getOr, memberName, memberRefName } from "../utils.js";
+import type { Expression, MemberExpression } from "@babel/types";
+import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
