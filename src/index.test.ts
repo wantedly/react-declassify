@@ -489,7 +489,8 @@ describe("react-declassify", () => {
         class C extends React.Component {
           render() {
             const { bar, baz } = this.props;
-            return this.meth() + bar + baz;
+            const baz2 = this.props.baz;
+            return this.meth() + bar + baz + baz2;
           }
 
           meth() {
@@ -510,7 +511,7 @@ describe("react-declassify", () => {
             return foo + bar;
           }
 
-          return meth() + bar + baz;
+          return meth() + bar + baz + baz;
         };
       `;
       expect(transform(input)).toBe(output);

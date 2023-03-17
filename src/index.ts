@@ -85,9 +85,6 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   const { types: t } = babel;
   const { ts } = options;
 
-  for (const path of body.locals.removePaths) {
-    path.remove();
-  }
   for (const [, prop] of body.props.props) {
     for (const alias of prop.aliases) {
       if (alias.localName !== prop.newAliasName!) {
@@ -97,6 +94,9 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
         alias.scope.rename(alias.localName, prop.newAliasName!);
       }
     }
+  }
+  for (const path of body.locals.removePaths) {
+    path.remove();
   }
   for (const ren of body.render.renames) {
     // Rename local variables in the render method

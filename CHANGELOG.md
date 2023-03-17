@@ -4,6 +4,7 @@
   - Add support for refs
 - Fixed
   - Keep generator/async flags
+  - Fix renaming failure in some cases
 
 ## 0.1.4
 
