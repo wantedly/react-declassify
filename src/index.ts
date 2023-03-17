@@ -19,7 +19,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         if (path.parentPath.isExportDefaultDeclaration()) {
           const declPath = path.parentPath;
           try {
-            const body = analyzeBody(path, babel);
+            const body = analyzeBody(path);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             if (path.node.id) {
               declPath.replaceWithMultiple([
@@ -50,7 +50,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           }
         } else {
           try {
-            const body = analyzeBody(path, babel);
+            const body = analyzeBody(path);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             path.replaceWith(t.variableDeclaration("const", [
               t.variableDeclarator(

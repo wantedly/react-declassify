@@ -67,8 +67,8 @@ export type ComponentBody = {
   props: PropsObjAnalysis;
 };
 
-export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof import("@babel/core")): ComponentBody {
-  const locals2 = new LocalManager();
+export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
+  const locals = new LocalManager();
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
   const propsObjSites = getAndDelete(sites, "props") ?? [];
@@ -76,9 +76,9 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
 
   const stateObjSites = getAndDelete(sites, "state") ?? [];
   const setStateSites = getAndDelete(sites, "setState") ?? [];
-  const states = analyzeState(stateObjSites, setStateSites, locals2);
+  const states = analyzeState(stateObjSites, setStateSites, locals);
 
-  const locals = analyzeOuterCapturings(path);
+  analyzeOuterCapturings(path, locals);
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
   const members = new Map<string, MethodAnalysis>();
   const thisRefs: ThisRef[] = [];
@@ -137,22 +137,22 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals2);
+  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
-      propAnalysis.newAliasName = newLocal(name, babel, locals);
+      propAnalysis.newAliasName = locals.newLocal(name);
     }
   }
 
-  const render = analyzeRender(renderPath, babel, locals, locals2);
+  const render = analyzeRender(renderPath, locals);
 
   for (const [name, stateAnalysis] of states.entries()) {
-    stateAnalysis.localName = newLocal(name, babel, locals);
-    stateAnalysis.localSetterName = newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, babel, locals);
+    stateAnalysis.localName = locals.newLocal(name);
+    stateAnalysis.localSetterName = locals.newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`);
   }
 
   return {
-    locals: locals2,
+    locals,
     render,
     state: states,
     members,
@@ -174,19 +174,17 @@ export type LocalRename = {
 
 function analyzeRender(
   path: NodePath<ClassMethod>,
-  babel: typeof import("@babel/core"),
-  locals: Set<string>,
-  locals2: LocalManager,
+  locals: LocalManager,
 ): RenderAnalysis {
   const renames: LocalRename[] = [];
   for (const [name, binding] of Object.entries(path.scope.bindings)) {
     if (
-      locals2.allRemovePaths.has(binding.path as NodePath<RemovableNode>)
+      locals.allRemovePaths.has(binding.path as NodePath<RemovableNode>)
     ) {
       // Already handled as an alias
       continue;
     }
-    const newName = newLocal(name, babel, locals);
+    const newName = locals.newLocal(name);
     renames.push({
       scope: binding.scope,
       oldName: name,
@@ -218,13 +216,14 @@ export type ThisRef = {
   name: string;
 };
 
-function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<string> {
+function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>, locals: LocalManager): Set<string> {
   const capturings = new Set<string>();
   function visitIdent(path: NodePath<Identifier | JSXIdentifier>) {
     path.getOuterBindingIdentifiers
     const binding = path.scope.getBinding(path.node.name);
     if (!binding || binding.path.isAncestor(classPath)) {
       capturings.add(path.node.name);
+      locals.markCaptured(path.node.name);
     }
   }
   classPath.get("body").traverse({
@@ -240,27 +239,6 @@ function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>): Set<stri
     }
   });
   return capturings;
-}
-
-function newLocal(baseName: string, babel: typeof import("@babel/core"), locals: Set<string>): string {
-  let name = baseName.replace(/[^\p{ID_Continue}$\u200C\u200D]/gu, "");
-  if (!/^[\p{ID_Start}_$]/u.test(name) || !babel.types.isValidIdentifier(name)) {
-    name = `_${name}`;
-  }
-  if (locals.has(name)) {
-    name = name.replace(/\d+$/, "");
-    for (let i = 0;; i++) {
-      if (i >= 1000000) {
-        throw new Error("Unexpected infinite loop");
-      }
-      if (!locals.has(`${name}${i}`)) {
-        name = `${name}${i}`;
-        break;
-      }
-    }
-  }
-  locals.add(name);
-  return name;
 }
 
 export function needsProps(body: ComponentBody): boolean {

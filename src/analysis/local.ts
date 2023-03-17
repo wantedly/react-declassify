@@ -1,9 +1,89 @@
 import type { NodePath } from "@babel/core";
 import type { ObjectProperty, RestElement, VariableDeclaration, VariableDeclarator } from "@babel/types";
 
+const RE_IDENT = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200C\u200D]*$/u;
+const RESERVED: ReadonlySet<string> = new Set<string>([
+  // Pure reserved words
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "new",
+  "null",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  // Strict mode reserved
+  "arguments",
+  "enum",
+  "eval",
+  "implements",
+  "interface",
+  "let",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "static",
+  "yield",
+  // Module-level reserved
+  "await",
+]);
+
 export type RemovableNode = ObjectProperty | RestElement | VariableDeclarator | VariableDeclaration;
 
 export class LocalManager {
+  assigned = new Set<string>();
+  markCaptured(name: string) {
+    this.assigned.add(name);
+  }
+  newLocal(baseName: string): string {
+    let name = baseName.replace(/[^\p{ID_Continue}$\u200C\u200D]/gu, "");
+    if (!/^[\p{ID_Start}_$]/u.test(name) || RESERVED.has(name)) {
+      name = `_${name}`;
+    }
+    if (this.assigned.has(name)) {
+      name = name.replace(/\d+$/, "");
+      for (let i = 0;; i++) {
+        if (i >= 1000000) {
+          throw new Error("Unexpected infinite loop");
+        }
+        if (!this.assigned.has(`${name}${i}`)) {
+          name = `${name}${i}`;
+          break;
+        }
+      }
+    }
+    this.assigned.add(name);
+    return name;
+  }
+
   removePaths = new Set<NodePath<RemovableNode>>();
   allRemovePaths = new Set<NodePath<RemovableNode>>();
   reserveRemoval(path: NodePath): boolean {
