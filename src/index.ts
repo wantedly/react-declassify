@@ -88,11 +88,6 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   for (const path of body.locals.removePaths) {
     path.remove();
   }
-  for (const alias of body.props.allAliases) {
-    // Remove assignments of this.props.
-    // We re-add them later to achieve hoisting.
-    removeLVal(alias.path);
-  }
   for (const [, prop] of body.props.props) {
     for (const alias of prop.aliases) {
       if (alias.localName !== prop.newAliasName!) {
@@ -278,34 +273,6 @@ function getReactImport(
     )
   );
   return t.identifier(newName);
-}
-
-function removeLVal(path: NodePath<LVal>) {
-  if (path.parentPath.isVariableDeclarator({ id: path.node })) {
-    if (path.parentPath.parentPath.isVariableDeclaration()) {
-      const declPath = path.parentPath.parentPath;
-      if (declPath.node.declarations.length === 1) {
-        declPath.remove();
-      } else {
-        path.parentPath.remove();
-      }
-      return;
-    }
-  } else if (path.parentPath.isObjectProperty({ value: path.node })) {
-    if (path.parentPath.parentPath.isObjectPattern()) {
-      const patPath = path.parentPath.parentPath;
-      if (patPath.node.properties.length === 1) {
-        removeLVal(patPath);
-      } else {
-        path.parentPath.remove();
-      }
-      return;
-    }
-  }
-  if (path.parentPath.node) {
-    throw new Error(`Cannot remove lval: child of ${path.parentPath.node.type}`);
-  }
-  throw new Error(`Cannot remove lval: ${path.node.type}`);
 }
 
 /**

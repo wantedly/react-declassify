@@ -3,6 +3,7 @@ import type { Scope } from "@babel/traverse";
 import type { Expression, LVal, MemberExpression } from "@babel/types";
 import { getOr, memberName, memberRefName } from "../utils.js";
 import { AnalysisError } from "./error.js";
+import type { LocalManager } from "./local.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
 
@@ -35,7 +36,6 @@ export type PropSite = {
 export type PropAlias = {
   scope: Scope,
   localName: string,
-  path: NodePath<LVal>,
 };
 
 /**
@@ -55,6 +55,7 @@ export type PropAlias = {
 export function analyzeProps(
   propsObjSites: ThisFieldSite[],
   defaultPropsObjSites: StaticFieldSite[],
+  locals: LocalManager,
 ): PropsObjAnalysis {
   const defaultProps = analyzeDefaultProps(defaultPropsObjSites);
   const newObjSites: PropsObjSite[] = [];
@@ -78,8 +79,8 @@ export function analyzeProps(
         getProp(name).aliases.push({
           scope: aliasing.scope,
           localName: aliasing.localName,
-          path: aliasing.idPath,
         });
+        locals.reserveRemoval(aliasing.idPath);
       }
     } else if (defaultProps) {
       if (memberAnalysis.memberExpr) {

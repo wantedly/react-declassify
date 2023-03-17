@@ -137,7 +137,7 @@ export function analyzeBody(path: NodePath<ClassDeclaration>, babel: typeof impo
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites, defaultPropsObjSites);
+  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals2);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
       propAnalysis.newAliasName = newLocal(name, babel, locals);
