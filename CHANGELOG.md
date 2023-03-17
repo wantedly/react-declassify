@@ -2,6 +2,7 @@
 
 - Added
   - Add support for `const { ... } = this.state`
+  - Rename methods if necessary
 - Misc
   - Refactoring
 

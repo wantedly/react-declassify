@@ -84,7 +84,7 @@ export const C = props => {
   - [x] Transform class fields initialized as functions to `function`s
   - [ ] Use `useCallback` if deemed necessary
   - [ ] Auto-expand direct callback call (like `this.props.onClick()`) to indirect call
-  - [ ] Rename methods if necessary
+  - [x] Rename methods if necessary
   - [ ] Skip method-binding expressions (e.g. `onClick={this.onClick.bind(this)}`)
   - [ ] Skip method-binding statements (e.g. `this.onClick = this.onClick.bind(this)`)
 - [ ] Support for `this.state`

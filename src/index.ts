@@ -132,10 +132,14 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       }
     }
   }
-  for (const tr of body.thisRefs) {
-    if (tr.kind === "userDefined") {
-      // this.foo -> foo
-      tr.path.replaceWith(tr.path.node.property);
+  for (const [, field] of body.userDefined.fields) {
+    if (field.type === "user_defined_function") {
+      for (const site of field.sites) {
+        if (site.type === "expr") {
+          // this.foo -> foo
+          site.path.replaceWith(t.identifier(field.localName!));
+        }
+      }
     }
   }
   // Preamble is a set of statements to be added before the original render body.
@@ -178,33 +182,35 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       )
     ]))
   }
-  for (const [name, mem] of body.members.entries()) {
-    // Method definitions.
-    if (mem.type === "method") {
-      const methNode = mem.path.node;
-      preamble.push(t.functionDeclaration(
-        methNode.key as Identifier,
-        methNode.params as (Identifier | RestElement | Pattern)[],
-        methNode.body,
-      ));
-    } else {
-      const methNode = mem.initPath.node;
-      if (methNode.type === "ArrowFunctionExpression") {
+  for (const [, field] of body.userDefined.fields) {
+    if (field.type === "user_defined_function") {
+      // Method definitions.
+      if (field.init.type === "method") {
+        const methNode = field.init.path.node;
         preamble.push(t.functionDeclaration(
-          t.identifier(name),
-          methNode.params,
-          methNode.body.type === "BlockStatement"
-            ? methNode.body
-            : t.blockStatement([
-              t.returnStatement(methNode.body)
-            ]),
-        ));
-      } else {
-        preamble.push(t.functionDeclaration(
-          t.identifier(name),
-          methNode.params,
+          t.identifier(field.localName!),
+          methNode.params as (Identifier | RestElement | Pattern)[],
           methNode.body,
         ));
+      } else {
+        const methNode = field.init.initPath.node;
+        if (methNode.type === "ArrowFunctionExpression") {
+          preamble.push(t.functionDeclaration(
+            t.identifier(field.localName!),
+            methNode.params,
+            methNode.body.type === "BlockStatement"
+              ? methNode.body
+              : t.blockStatement([
+                t.returnStatement(methNode.body)
+              ]),
+          ));
+        } else {
+          preamble.push(t.functionDeclaration(
+            t.identifier(field.localName!),
+            methNode.params,
+            methNode.body,
+          ));
+        }
       }
     }
   }

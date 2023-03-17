@@ -7,6 +7,7 @@ import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete, getOr, isClassMethodLike, memberName, memberRefName } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
+import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -19,36 +20,6 @@ export type { LocalManager } from "./analysis/local.js";
 export type { StateObjAnalysis } from "./analysis/state.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
 
-const SPECIAL_MEMBER_NAMES = new Set<string>([
-  // Special variables
-  "context",
-  "props",
-  "refs",
-  "state",
-  // Lifecycle
-  "constructor",
-  "render",
-  "componentDidCatch",
-  "componentDidMount",
-  "componentDidUpdate",
-  "componentWillMount",
-  "UNSAFE_componentWillMount",
-  "componentWillReceiveProps",
-  "UNSAFE_componentWillReceiveProps",
-  "componentWillUpdate",
-  "UNSAFE_componentWillUpdate",
-  "componentWillUnmount",
-  // Lifecycle predicates
-  "shouldComponentUpdate",
-  "getSnapshotBeforeUpdate",
-  "getChildContext",
-  // APIs (including deprecated)
-  "isReactComponent",
-  "isMounted",
-  "forceUpdate",
-  "setState",
-  "replaceState",
-]);
 const SPECIAL_STATIC_NAMES = new Set<string>([
   "childContextTypes",
   "contextTypes",
@@ -62,9 +33,8 @@ export type ComponentBody = {
   locals: LocalManager,
   render: RenderAnalysis;
   state: StateObjAnalysis;
-  members: Map<string, MethodAnalysis>;
-  thisRefs: ThisRef[];
   props: PropsObjAnalysis;
+  userDefined: UserDefinedAnalysis;
 };
 
 export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
@@ -78,55 +48,22 @@ export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
   const setStateSites = getAndDelete(sites, "setState") ?? [];
   const states = analyzeState(stateObjSites, setStateSites, locals);
 
+  const renderSites = getAndDelete(sites, "render") ?? [];
+
   analyzeOuterCapturings(path, locals);
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
-  const members = new Map<string, MethodAnalysis>();
-  const thisRefs: ThisRef[] = [];
-  for (const [name, fieldSites] of sites.entries()) {
-    if (name === "render") {
-      if (fieldSites.some((site) => site.type === "expr")) {
-        throw new AnalysisError(`do not use this.render`);
+  {
+    if (renderSites.some((site) => site.type === "expr")) {
+      throw new AnalysisError(`do not use this.render`);
+    }
+    const init = renderSites.find((site) => site.init);
+    if (init) {
+      if (init.path.isClassMethod()) {
+        renderPath = init.path;
       }
-      const init = fieldSites.find((site) => site.init);
-      if (init) {
-        if (init.path.isClassMethod()) {
-          renderPath = init.path;
-        }
-      }
-    } else if (!SPECIAL_MEMBER_NAMES.has(name)) {
-      const init = fieldSites.find((site) => site.init);
-      if (init) {
-        const init_ = init.init!;
-        if (isClassMethodLike(init.path)) {
-          members.set(name, analyzeMethod(init.path));
-        } else if (init_.type === "init_value") {
-          const initPath = init_.valuePath;
-          if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
-            members.set(name, analyzeFuncDef(initPath));
-          } else {
-            throw new AnalysisError(`Non-analyzable initialization of ${name}`);
-          }
-        } else {
-          throw new AnalysisError(`Non-analyzable initialization of ${name}`);
-        }
-      }
-      for (const site of fieldSites) {
-        if (site.init) {
-          continue;
-        }
-        if (site.type !== "expr" || site.hasWrite) {
-          throw new AnalysisError(`Invalid use of this.${name}`);
-        }
-        thisRefs.push({
-          kind: "userDefined",
-          path: site.path,
-          name,
-        });
-      }
-    } else {
-      throw new AnalysisError(`Cannot transform ${name}`);
     }
   }
+  const userDefined = analyzeUserDefined(sites);
   for (const [name] of staticFields) {
     if (!SPECIAL_STATIC_NAMES.has(name)) {
       throw new AnalysisError(`Cannot transform static ${name}`);
@@ -151,13 +88,16 @@ export function analyzeBody(path: NodePath<ClassDeclaration>): ComponentBody {
     stateAnalysis.localSetterName = locals.newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`);
   }
 
+  for (const [name, field] of userDefined.fields) {
+    field.localName = locals.newLocal(name);
+  }
+
   return {
     locals,
     render,
     state: states,
-    members,
-    thisRefs,
     props,
+    userDefined,
   };
 }
 
