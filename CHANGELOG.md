@@ -10,6 +10,7 @@
 - Fixed
   - Keep generator/async flags
   - Fix renaming failure in some cases
+  - Fix local variable conflict when the name was introduced in an inner block.
 
 ## 0.1.4
 

@@ -42,7 +42,7 @@ export function analyzeBody(
   path: NodePath<ClassDeclaration>,
   head: ComponentHead
 ): ComponentBody {
-  const locals = new LocalManager();
+  const locals = new LocalManager(path);
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
   const propsObjSites = getAndDelete(sites, "props") ?? [];
@@ -81,19 +81,23 @@ export function analyzeBody(
   const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
-      propAnalysis.newAliasName = locals.newLocal(name);
+      propAnalysis.newAliasName = locals.newLocal(
+        name,
+        propAnalysis.sites.map((site) => site.path)
+      );
     }
   }
 
   const render = analyzeRender(renderPath, locals);
 
   for (const [name, stateAnalysis] of states.entries()) {
-    stateAnalysis.localName = locals.newLocal(name);
-    stateAnalysis.localSetterName = locals.newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`);
+    const bindingPaths = stateAnalysis.sites.map((site) => site.path);
+    stateAnalysis.localName = locals.newLocal(name, bindingPaths);
+    stateAnalysis.localSetterName = locals.newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, bindingPaths);
   }
 
   for (const [name, field] of userDefined.fields) {
-    field.localName = locals.newLocal(name);
+    field.localName = locals.newLocal(name, field.sites.map((site) => site.path));
   }
 
   return {
@@ -128,7 +132,7 @@ function analyzeRender(
       // Already handled as an alias
       continue;
     }
-    const newName = locals.newLocal(name);
+    const newName = locals.newLocal(name, []);
     renames.push({
       scope: binding.scope,
       oldName: name,

@@ -1,5 +1,6 @@
+import type { Scope } from "@babel/traverse";
 import type { NodePath } from "@babel/core";
-import type { ObjectProperty, RestElement, VariableDeclaration, VariableDeclarator } from "@babel/types";
+import type { ClassDeclaration, ObjectProperty, RestElement, VariableDeclaration, VariableDeclarator } from "@babel/types";
 
 // const RE_IDENT = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200C\u200D]*$/u;
 const RESERVED: ReadonlySet<string> = new Set<string>([
@@ -59,22 +60,28 @@ const RESERVED: ReadonlySet<string> = new Set<string>([
 export type RemovableNode = ObjectProperty | RestElement | VariableDeclarator | VariableDeclaration;
 
 export class LocalManager {
+  classPath: NodePath<ClassDeclaration>;
+  constructor(classPath: NodePath<ClassDeclaration>) {
+    this.classPath = classPath;
+  }
+
   assigned = new Set<string>();
   markCaptured(name: string) {
     this.assigned.add(name);
   }
-  newLocal(baseName: string): string {
+  newLocal(baseName: string, paths: NodePath[]): string {
+    const bindingScopes = this.collectScope(paths);
     let name = baseName.replace(/[^\p{ID_Continue}$\u200C\u200D]/gu, "");
     if (!/^[\p{ID_Start}_$]/u.test(name) || RESERVED.has(name)) {
       name = `_${name}`;
     }
-    if (this.assigned.has(name)) {
+    if (this.hasName(name, bindingScopes)) {
       name = name.replace(/\d+$/, "");
       for (let i = 0;; i++) {
         if (i >= 1000000) {
           throw new Error("Unexpected infinite loop");
         }
-        if (!this.assigned.has(`${name}${i}`)) {
+        if (!this.hasName(`${name}${i}`, bindingScopes)) {
           name = `${name}${i}`;
           break;
         }
@@ -82,6 +89,33 @@ export class LocalManager {
     }
     this.assigned.add(name);
     return name;
+  }
+
+  private hasName(name: string, scopes: Scope[]): boolean {
+    return this.assigned.has(name) ||
+      scopes.some((scope) => {
+        const binding = scope.getBinding(name);
+        if (!binding) {
+          return false;
+        }
+        if (this.allRemovePaths.has(binding.path as NodePath<RemovableNode>)) {
+          return false;
+        }
+        return true;
+      });
+  }
+
+  private collectScope(paths: NodePath[]): Scope[] {
+    const scopes = new Set<Scope>();
+    const baseScope = this.classPath.scope;
+    for (const path of paths) {
+      let currentScope: Scope | undefined = path.scope;
+      while (currentScope && currentScope !== baseScope) {
+        scopes.add(currentScope);
+        currentScope = currentScope.parent;
+      }
+    }
+    return Array.from(scopes);
   }
 
   removePaths = new Set<NodePath<RemovableNode>>();

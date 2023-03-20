@@ -463,7 +463,7 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
-    it("renames methods if necessary", () => {
+    it("renames methods if necessary (toplevel capturing)", () => {
       const input = dedent`\
         class C extends React.Component {
           render() {
@@ -483,6 +483,36 @@ describe("react-declassify", () => {
           }
 
           const foo = foo0(100);
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("renames methods if necessary (inner capturing)", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            if (true) {
+              const foo = this.foo(100);
+            }
+            return null;
+          }
+
+          foo(x) {
+            return x + 42;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          function foo0(x) {
+            return x + 42;
+          }
+
+          if (true) {
+            const foo = foo0(100);
+          }
           return null;
         };
       `;
