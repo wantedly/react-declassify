@@ -47,6 +47,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   const staticFields = new Map<string, StaticFieldSite[]>();
   const getStaticField = (name: string) => getOr(staticFields, name, () => []);
   let constructor: NodePath<ClassMethod> | undefined = undefined;
+  const bodies: NodePath[] = [];
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
     if (isNamedClassElement(itemPath)) {
@@ -66,6 +67,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
           hasWrite: undefined,
           hasSideEffect: !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
         });
+        if (valuePath) {
+          bodies.push(valuePath);
+        }
       } else if (isClassMethodOrDecl(itemPath)) {
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
@@ -79,6 +83,12 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
             hasWrite: undefined,
             hasSideEffect: false,
           });
+          if (isClassMethodLike(itemPath)) {
+            for (const paramPath of itemPath.get("params")) {
+               bodies.push(paramPath);
+            }
+            bodies.push(itemPath.get("body"));
+          }
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
         } else if (kind === "constructor") {
@@ -169,6 +179,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         hasWrite: undefined,
         hasSideEffect: estimateSideEffect(stmt.node.expression.right),
       });
+      bodies.push(exprPath.get("right"));
     }
   }
 
@@ -212,42 +223,8 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       });
     });
   }
-  for (const itemPath of path.get("body").get("body")) {
-    if (isNamedClassElement(itemPath)) {
-      if (itemPath.node.static) {
-        continue;
-      }
-      if (isClassPropertyLike(itemPath)) {
-        const valuePath = itemPath.get("value");
-        if (valuePath.isExpression()) {
-          traverseItem(valuePath);
-        }
-      } else if (isClassMethodLike(itemPath)) {
-        const kind = itemPath.node.kind ?? "method";
-        if (kind === "method") {
-          for (const paramPath of itemPath.get("params")) {
-            traverseItem(paramPath);
-          }
-          traverseItem(itemPath.get("body"));
-        } else if (kind === "get" || kind === "set") {
-          throw new AnalysisError(`Not implemented yet: getter / setter`);
-        } else if (kind === "constructor") {
-          // Skip
-        } else {
-          throw new AnalysisError(`Not implemented yet: ${kind}`);
-        }
-      } else if (itemPath.isTSDeclareMethod()) {
-        // skip
-      } else if (isClassAccessorProperty(itemPath)) {
-        throw new AnalysisError(`Not implemented yet: class accessor property`);
-      }
-    } else if (isStaticBlock(itemPath)) {
-      throw new AnalysisError(`Not implemented yet: static block`);
-    } else if (itemPath.isTSIndexSignature()) {
-      // Ignore
-    } else {
-      throw new AnalysisError(`Unknown class element`);
-    }
+  for (const body of bodies) {
+    traverseItem(body);
   }
 
   for (const [name, fieldSites] of thisFields) {

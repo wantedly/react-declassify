@@ -11,6 +11,7 @@
   - Keep generator/async flags
   - Fix renaming failure in some cases
   - Fix local variable conflict when the name was introduced in an inner block.
+  - Fix `this.props`, `this.setState`, and so on not being accounted for when they are declared in the constructor.
 
 ## 0.1.4
 

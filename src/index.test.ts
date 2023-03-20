@@ -678,6 +678,31 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("transforms setState in constructor", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+            this.reset = () => {
+              this.setState({ foo: 42 });
+            };
+          }
+          render() {
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const [foo, setFoo] = React.useState();
+
+          function reset() {
+            setFoo(42);
+          }
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   describe("Ref transformation", () => {
