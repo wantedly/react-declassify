@@ -1,4 +1,4 @@
-# react-declassify: say goodbye to class components \[EXPERIMENTAL\]
+# react-declassify: say goodbye to class components
 
 ## Usage
 
