@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod } from "@babel/types";
+import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod, TSType } from "@babel/types";
 import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
@@ -11,18 +11,26 @@ export type ThisFields = {
 export type ThisFieldSite = {
   type: "class_field";
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
-  hasType: boolean;
+  typing: FieldTyping | undefined;
   init: FieldInit | undefined;
   hasWrite: undefined;
   hasSideEffect: boolean;
 } | {
   type: "expr";
   path: NodePath<MemberExpression>;
-  hasType: undefined;
+  typing: undefined;
   init: undefined;
   hasWrite: boolean;
   hasSideEffect: undefined;
 };
+
+export type FieldTyping = {
+  type: "type_value";
+  valueTypePath: NodePath<TSType>;
+} | {
+  type: "type_method";
+  methodDeclPath: NodePath<TSDeclareMethod>;
+}
 
 export type FieldInit = {
   type: "init_value";
@@ -35,7 +43,7 @@ export type FieldInit = {
 export type StaticFieldSite = {
   type: "class_field";
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
-  hasType: boolean;
+  typing: FieldTyping | undefined;
   init: FieldInit | undefined;
   hasWrite: undefined;
   hasSideEffect: boolean;
@@ -59,10 +67,17 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       const field = isStatic ? getStaticField(name) : getThisField(name);
       if (isClassPropertyLike(itemPath)) {
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
+        const typeAnnotation = itemPath.get("typeAnnotation");
+        const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation() ? typeAnnotation : undefined;
         field.push({
           type: "class_field",
           path: itemPath,
-          hasType: !!itemPath.node.typeAnnotation,
+          typing: typeAnnotation_
+            ? {
+              type: "type_value",
+              valueTypePath: typeAnnotation_.get("typeAnnotation"),
+            }
+            : undefined,
           init: valuePath ?  { type: "init_value", valuePath } : undefined,
           hasWrite: undefined,
           hasSideEffect: !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
@@ -76,7 +91,12 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
           field.push({
             type: "class_field",
             path: itemPath,
-            hasType: itemPath.isTSDeclareMethod(),
+            typing: itemPath.isTSDeclareMethod()
+              ? {
+                type: "type_method",
+                methodDeclPath: itemPath,
+              }
+              : undefined,
             init: isClassMethodLike(itemPath)
               ? { type: "init_method", methodPath: itemPath }
               : undefined,
@@ -171,7 +191,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       field.push({
         type: "class_field",
         path: exprPath,
-        hasType: false,
+        typing: undefined,
         init: {
           type: "init_value",
           valuePath: exprPath.get("right"),
@@ -216,7 +236,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       field.push({
         type: "expr",
         path: thisMemberPath,
-        hasType: undefined,
+        typing: undefined,
         init: undefined,
         hasWrite,
         hasSideEffect: undefined
@@ -235,7 +255,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);
     }
-    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.hasType), 0);
+    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.typing), 0);
     if (numTypes > 1) {
       throw new AnalysisError(`${name} is declared more than once`);
     }
@@ -248,7 +268,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     if (numInits > 1) {
       throw new AnalysisError(`static ${name} is initialized more than once`);
     }
-    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.hasType), 0);
+    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.typing), 0);
     if (numTypes > 1) {
       throw new AnalysisError(`static ${name} is declared more than once`);
     }

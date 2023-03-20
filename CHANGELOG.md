@@ -1,7 +1,7 @@
 ## Unreleased
 
 - Added
-  - Add support for refs
+  - Add support for refs (types are supported as well)
   - Add support for state types
   - Add support for opt-out in one of:
     - `@abstract` JSDoc comment

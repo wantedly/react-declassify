@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
-import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionExpression } from "@babel/types";
-import { isClassMethodLike } from "../utils.js";
+import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionExpression, TSType } from "@babel/types";
+import { isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
 import type { ThisFieldSite } from "./this_fields.js";
@@ -48,12 +48,14 @@ export type UserDefined =
 export type UserDefinedRef = {
   type: "user_defined_ref";
   localName?: string | undefined;
+  typeAnnotation?: NodePath<TSType> | undefined;
   sites: ThisFieldSite[];
 };
 export type UserDefinedDirectRef = {
   type: "user_defined_direct_ref";
   localName?: string | undefined;
   init: NodePath<Expression>;
+  typeAnnotation?: NodePath<TSType> | undefined;
   sites: ThisFieldSite[];
 };
 export type UserDefinedFn = {
@@ -81,7 +83,10 @@ export function analyzeUserDefined(
     }
     let fnInit: FnInit | undefined = undefined;
     let isRefInit = false;
+    let refInitType1: NodePath<TSType> | undefined = undefined;
+    let refInitType2: NodePath<TSType> | undefined = undefined;
     let valInit: NodePath<Expression> | undefined = undefined;
+    let valInitType: NodePath<TSType> | undefined = undefined;
     const initSite = fieldSites.find((site) => site.init);
     if (initSite) {
       const init = initSite.init!;
@@ -108,9 +113,46 @@ export function analyzeUserDefined(
               throw new AnalysisError("Extra arguments to createRef");
             }
             isRefInit = true;
+            const typeParameters = nonNullPath(initPath.get("typeParameters"));
+            if (typeParameters) {
+              const params = typeParameters.get("params");
+              if (params.length > 0) {
+                // this.foo = React.createRef<HTMLDivElement>();
+                //                            ^^^^^^^^^^^^^^
+                refInitType1 = params[0]!;
+              }
+            }
           }
         }
         valInit = initPath;
+      }
+    }
+    const typeSite = fieldSites.find((site) => site.typing);
+    if (typeSite) {
+      const typing = typeSite.typing!;
+      if (typing.type === "type_value") {
+        if (typing.valueTypePath.isTSTypeReference()) {
+          const lastName =
+            typing.valueTypePath.node.typeName.type === "Identifier"
+            ? typing.valueTypePath.node.typeName.name
+            : typing.valueTypePath.node.typeName.right.name;
+          const typeParameters = nonNullPath(typing.valueTypePath.get("typeParameters"));
+          if (lastName === "RefObject" && typeParameters) {
+            const params = typeParameters.get("params");
+            if (params.length > 0) {
+              // class C {
+              //   foo: React.RefObject<HTMLDivElement>;
+              //                        ^^^^^^^^^^^^^^
+              // }
+              refInitType2 = params[0]!;
+            }
+          }
+        }
+        // class C {
+        //   foo: HTMLDivElement | null;
+        //        ^^^^^^^^^^^^^^^^^^^^^
+        // }
+        valInitType = typing.valueTypePath;
       }
     }
     const hasWrite = fieldSites.some((site) => site.hasWrite);
@@ -123,12 +165,14 @@ export function analyzeUserDefined(
     } else if (isRefInit && !hasWrite) {
       fields.set(name, {
         type: "user_defined_ref",
+        typeAnnotation: refInitType1 ?? refInitType2,
         sites: fieldSites,
       });
     } else if (valInit) {
       fields.set(name, {
         type: "user_defined_direct_ref",
         init: valInit,
+        typeAnnotation: valInitType,
         sites: fieldSites,
       });
     } else {

@@ -70,7 +70,7 @@ export const C = props => {
   - [x] Add `React.FC` annotation
   - [x] Transform `P` type argument
   - [x] Transform `S` type argument
-  - [ ] Transform ref types
+  - [x] Transform ref types
   - [ ] Transform generic components
   - [ ] Modify Props appropriately if defaultProps is present
   - [ ] Modify Props appropriately if `children` seems to be used

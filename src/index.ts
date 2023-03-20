@@ -246,26 +246,42 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       }
     } else if (field.type === "user_defined_ref") {
       // const foo = useRef(null);
+      const call = t.callExpression(
+        getReactImport("useRef", babel, head.superClassRef),
+        [t.nullLiteral()]
+      );
       preamble.push(t.variableDeclaration(
         "const",
         [t.variableDeclarator(
           t.identifier(field.localName!),
-          t.callExpression(
-            getReactImport("useRef", babel, head.superClassRef),
-            [t.nullLiteral()]
-          ),
+          ts && field.typeAnnotation
+            ? assignTypeParameters(
+              call,
+              t.tsTypeParameterInstantiation([
+                field.typeAnnotation.node
+              ])
+            )
+            : call
         )]
       ))
     } else if (field.type === "user_defined_direct_ref") {
       // const foo = useRef(init);
+      const call = t.callExpression(
+        getReactImport("useRef", babel, head.superClassRef),
+        [field.init.node]
+      );
       preamble.push(t.variableDeclaration(
         "const",
         [t.variableDeclarator(
           t.identifier(field.localName!),
-          t.callExpression(
-            getReactImport("useRef", babel, head.superClassRef),
-            [field.init.node]
-          ),
+          ts && field.typeAnnotation
+            ? assignTypeParameters(
+              call,
+              t.tsTypeParameterInstantiation([
+                field.typeAnnotation.node
+              ])
+            )
+            : call
         )]
       ))
     }

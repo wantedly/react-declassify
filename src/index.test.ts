@@ -12,7 +12,7 @@ function transform(code: string, options: {
     babelrc: false,
     filename: ts ? "file.tsx" : "file.jsx",
     parserOpts: {
-      plugins: ["jsx", "typescript"],
+      plugins: ts ? ["jsx", "typescript"] : ["jsx"],
     },
     plugins: [plugin],
   });
@@ -771,6 +771,40 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("transforms typed createRef as useRef", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          button: React.RefObject<HTMLButtonElement>
+          constructor(props) {
+            super(props);
+            this.div = React.createRef<HTMLDivElement>();
+            this.button = React.createRef();
+          }
+
+          foo() {
+            console.log(this.div.current);
+          }
+
+          render() {
+            return <div ref={this.div} />;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C: React.FC = () => {
+          const button = React.useRef<HTMLButtonElement>(null);
+
+          function foo() {
+            console.log(div.current);
+          }
+
+          const div = React.useRef<HTMLDivElement>(null);
+          return <div ref={div} />;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
     it("transforms class field as useRef", () => {
       const input = dedent`\
         class C extends React.Component {
@@ -799,6 +833,38 @@ describe("react-declassify", () => {
         };
       `;
       expect(transform(input)).toBe(output);
+    });
+
+    it("transforms typed class field as useRef", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          div: HTMLDivElement | null;
+          constructor(props) {
+            super(props);
+            this.div = null;
+          }
+
+          foo() {
+            console.log(this.div);
+          }
+
+          render() {
+            return <div ref={(elem) => this.div = elem} />;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C: React.FC = () => {
+          const div = React.useRef<HTMLDivElement | null>(null);
+
+          function foo() {
+            console.log(div.current);
+          }
+
+          return <div ref={(elem) => div.current = elem} />;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
     });
 
     it("transforms ref initializer", () => {
