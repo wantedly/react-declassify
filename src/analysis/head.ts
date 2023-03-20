@@ -79,7 +79,7 @@ function resolveAlias(path: NodePath<TSType>): NodePath<TSType | TSInterfaceBody
           for (const body of path_.get("body")) {
             if (body.isTSTypeAliasDeclaration() && body.node.id.name === name) {
               return body.get("typeAnnotation");
-            } else if (body.isTSInterfaceDeclaration()) {
+            } else if (body.isTSInterfaceDeclaration() && body.node.id.name === name) {
               return body.get("body");
             }
           }

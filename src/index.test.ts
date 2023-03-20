@@ -629,13 +629,14 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
-    it("transforms state types", () => {
+    it("transforms state types (type alias)", () => {
       const input = dedent`\
+        type Props = {};
         type State = {
           foo: number,
           bar: number,
         };
-        class C extends React.Component<{}, State> {
+        class C extends React.Component<Props, State> {
           state = {
             foo: 1,
             bar: 2,
@@ -646,12 +647,46 @@ describe("react-declassify", () => {
         }
       `;
       const output = dedent`\
+        type Props = {};
         type State = {
           foo: number,
           bar: number,
         };
 
-        const C: React.FC<{}> = () => {
+        const C: React.FC<Props> = () => {
+          const [foo, setFoo] = React.useState<number>(1);
+          const [bar, setBar] = React.useState<number>(2);
+          return <button onClick={() => setBar(3)}>{foo}</button>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
+    it("transforms state types (interface)", () => {
+      const input = dedent`\
+        interface Props {}
+        interface State {
+          foo: number,
+          bar: number,
+        }
+        class C extends React.Component<Props, State> {
+          state = {
+            foo: 1,
+            bar: 2,
+          };
+          render() {
+            return <button onClick={() => this.setState({ bar: 3 })}>{this.state.foo}</button>;
+          }
+        }
+      `;
+      const output = dedent`\
+        interface Props {}
+        interface State {
+          foo: number,
+          bar: number,
+        }
+
+        const C: React.FC<Props> = () => {
           const [foo, setFoo] = React.useState<number>(1);
           const [bar, setBar] = React.useState<number>(2);
           return <button onClick={() => setBar(3)}>{foo}</button>;
