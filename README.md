@@ -2,6 +2,10 @@
 
 This codemod automatically transforms **React class components** into **React functional components using Hooks** for you!
 
+|Before|After|
+|---|---|
+|![before example 1](./img/example1-before.png)|![after example 1](./img/example1-after.png)|
+
 ## Features
 
 - ✅ Supports props, states, methods, and refs.
@@ -24,6 +28,81 @@ npx codemod --plugin react-declassify 'src/**/*.tsx'
 ```
 
 ## Example
+
+Before:
+
+```tsx
+import React from "react";
+
+type Props = {
+  by: number;
+};
+
+type State = {
+  counter: number;
+};
+
+export class C extends React.Component<Props, State> {
+  static defaultProps = {
+    by: 1
+  };
+
+  constructor(props) {
+    super(props);
+    this.state = {
+      counter: 0
+    };
+  }
+
+  render() {
+    return (
+      <>
+        <button onClick={() => this.onClick()}>
+          {this.state.counter}
+        </button>
+        <p>Current step: {this.props.by}</p>
+      </>
+    );
+  }
+
+  onClick() {
+    this.setState({ counter: this.state.counter + this.props.by });
+  }
+}
+```
+
+After:
+
+```tsx
+import React from "react";
+
+type Props = {
+  by: number;
+};
+
+type State = {
+  counter: number;
+};
+
+export const C: React.FC<Props> = props => {
+  const {
+    by = 1
+  } = props;
+
+  const [counter, setCounter] = React.useState<number>(0);
+
+  function onClick() {
+    setCounter(counter + by);
+  }
+
+  return <>
+    <button onClick={() => onClick()}>
+      {counter}
+    </button>
+    <p>Current step: {by}</p>
+  </>;
+};
+```
 
 Before:
 
