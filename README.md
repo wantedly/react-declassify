@@ -1,5 +1,14 @@
 # react-declassify: say goodbye to class components
 
+This codemod automatically transforms **React class components** into **React functional components using Hooks** for you!
+
+## Features
+
+- ✅ Supports props, states, methods, and refs.
+- ✅ Comments, spaces, and styles are preserved thanks to the [recast](https://github.com/benjamn/recast) library.
+- ✅ Designed to generate as idiomatic code as possible. Not something Babel or Webpack would generate!
+- ✅ Based on classical heuristic automation; no need to be fearful about whimsy LLMs.
+
 ## Usage
 
 ```
