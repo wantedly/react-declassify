@@ -10,6 +10,21 @@ export type ComponentHead = {
 };
 
 export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | undefined {
+  if (path.node.leadingComments?.some((comment) => /react-declassify-disable/.test(comment.value))) {
+    // Explicitly disabled
+    return;
+  }
+  if (
+    path.node.leadingComments?.some((comment) =>
+      comment.type === "CommentBlock" &&
+      /^\*/.test(comment.value) &&
+      /@abstract/.test(comment.value)
+    )
+    || path.node.abstract
+  ) {
+    // This is an abstract class to be inherited; do not attempt transformation.
+    return;
+  }
   const superClass = path.get("superClass");
   if (!superClass.isExpression()) {
     return;

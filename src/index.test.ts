@@ -101,7 +101,7 @@ describe("react-declassify", () => {
       class C extends React.Component {}
     `;
     const output = dedent`\
-      /* react-declassify:disabled Cannot perform transformation: Missing render method */
+      /* react-declassify-disable Cannot perform transformation: Missing render method */
       class C extends React.Component {}
     `;
     expect(transform(input)).toBe(output);
@@ -114,7 +114,7 @@ describe("react-declassify", () => {
       }
     `;
     const output = dedent`\
-      /* react-declassify:disabled Cannot perform transformation: Missing render method */
+      /* react-declassify-disable Cannot perform transformation: Missing render method */
       class C extends React.Component {
         rende() {}
       }
@@ -294,6 +294,37 @@ describe("react-declassify", () => {
         }
       `;
       expect(transform(input)).toBe(input);
+    });
+
+    describe("opt-out", () => {
+      it("ignores if marked as react-declassify-disable", () => {
+        const input = dedent`\
+          /* react-declassify-disable */
+          class C extends React.Component {
+            render() {}
+          }
+        `;
+        expect(transform(input)).toBe(input);
+      });
+
+      it("ignores if marked as abstract", () => {
+        const input = dedent`\
+          abstract class C extends React.Component {
+            render() {}
+          }
+        `;
+        expect(transform(input, { ts: true })).toBe(input);
+      });
+
+      it("ignores if marked as @abstract", () => {
+        const input = dedent`\
+          /** @abstract */
+          class C extends React.Component {
+            render() {}
+          }
+        `;
+        expect(transform(input)).toBe(input);
+      });
     });
   });
 

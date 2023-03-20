@@ -3,6 +3,10 @@
 - Added
   - Add support for refs
   - Add support for state types
+  - Add support for opt-out in one of:
+    - `@abstract` JSDoc comment
+    - `abstract` modifier
+    - `react-declassify-disable` comment
 - Fixed
   - Keep generator/async flags
   - Fix renaming failure in some cases

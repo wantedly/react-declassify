@@ -45,7 +45,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (!(e instanceof AnalysisError)) {
               throw e;
             }
-            t.addComment(declPath.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
+            t.addComment(declPath.node, "leading", ` react-declassify-disable Cannot perform transformation: ${e.message} `);
             refreshComments(declPath.node);
           }
         } else {
@@ -67,7 +67,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (!(e instanceof AnalysisError)) {
               throw e;
             }
-            t.addComment(path.node, "leading", ` react-declassify:disabled Cannot perform transformation: ${e.message} `);
+            t.addComment(path.node, "leading", ` react-declassify-disable Cannot perform transformation: ${e.message} `);
             refreshComments(path.node);
           }
         }
