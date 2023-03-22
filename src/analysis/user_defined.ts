@@ -62,6 +62,7 @@ export type UserDefinedFn = {
   type: "user_defined_function";
   localName?: string | undefined;
   init: FnInit;
+  typeAnnotation?: NodePath<TSType> | undefined;
   sites: ThisFieldSite[];
 };
 
@@ -160,6 +161,7 @@ export function analyzeUserDefined(
       fields.set(name, {
         type: "user_defined_function",
         init: fnInit,
+        typeAnnotation: valInitType,
         sites: fieldSites,
       });
     } else if (isRefInit && !hasWrite) {

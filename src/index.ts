@@ -1,6 +1,6 @@
-import type { ArrowFunctionExpression, Expression, Identifier, ImportDeclaration, MemberExpression, Pattern, RestElement, Statement, TSEntityName, TSType } from "@babel/types";
+import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { assignTypeAnnotation, assignTypeParameters, importName, isTS } from "./utils.js";
+import { assignReturnType, assignTypeAnnotation, assignTypeParameters, importName, isTS } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
@@ -213,34 +213,28 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
       // Method definitions.
       if (field.init.type === "method") {
         const methNode = field.init.path.node;
-        preamble.push(t.functionDeclaration(
-          t.identifier(field.localName!),
-          methNode.params as (Identifier | RestElement | Pattern)[],
-          methNode.body,
-          methNode.generator,
-          methNode.async,
-        ));
+        preamble.push(functionDeclarationFrom(babel, methNode, t.identifier(field.localName!)));
       } else {
         const methNode = field.init.initPath.node;
-        if (methNode.type === "ArrowFunctionExpression") {
-          preamble.push(t.functionDeclaration(
-            t.identifier(field.localName!),
-            methNode.params,
-            methNode.body.type === "BlockStatement"
-              ? methNode.body
-              : t.blockStatement([
-                t.returnStatement(methNode.body)
-              ]),
-            methNode.generator,
-            methNode.async,
-          ));
+        if (
+          methNode.type === "FunctionExpression"
+          && !field.typeAnnotation
+        ) {
+          preamble.push(functionDeclarationFrom(babel, methNode, t.identifier(field.localName!)));
         } else {
-          preamble.push(t.functionDeclaration(
-            t.identifier(field.localName!),
-            methNode.params,
-            methNode.body,
-            methNode.generator,
-            methNode.async,
+          const expr =
+            methNode.type === "FunctionExpression"
+            ? functionExpressionFrom(babel, methNode)
+            : arrowFunctionExpressionFrom(babel, methNode);
+          preamble.push(t.variableDeclaration(
+            "const",
+            [t.variableDeclarator(
+              assignTypeAnnotation(
+                t.identifier(field.localName!),
+                field.typeAnnotation ? t.tsTypeAnnotation(field.typeAnnotation.node) : undefined
+              ),
+              expr
+            )]
           ));
         }
       }
@@ -351,6 +345,75 @@ function getReactImport(
     )
   );
   return t.identifier(newName);
+}
+
+type FunctionLike = FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | ClassMethod | ClassPrivateMethod | ObjectMethod;
+
+function functionName(node: FunctionLike): Identifier | undefined {
+  switch (node.type) {
+    case "FunctionDeclaration":
+    case "FunctionExpression":
+      return node.id ?? undefined;
+  }
+}
+
+function functionDeclarationFrom(
+  babel: typeof import("@babel/core"),
+  node: FunctionLike,
+  name?: Identifier | null
+) {
+  const { types: t } = babel;
+  return assignReturnType(
+    t.functionDeclaration(
+      name ?? functionName(node),
+      node.params as (Identifier | RestElement | Pattern)[],
+      node.body.type === "BlockStatement"
+      ? node.body
+      : t.blockStatement([
+          t.returnStatement(node.body)
+        ]),
+      node.generator,
+      node.async,
+    ),
+    node.returnType
+  );
+}
+
+function functionExpressionFrom(
+  babel: typeof import("@babel/core"),
+  node: FunctionLike,
+  name?: Identifier | null
+) {
+  const { types: t } = babel;
+  return assignReturnType(
+    t.functionExpression(
+      name ?? functionName(node),
+      node.params as (Identifier | RestElement | Pattern)[],
+      node.body.type === "BlockStatement"
+      ? node.body
+      : t.blockStatement([
+          t.returnStatement(node.body)
+        ]),
+      node.generator,
+      node.async,
+    ),
+    node.returnType
+  );
+}
+
+function arrowFunctionExpressionFrom(
+  babel: typeof import("@babel/core"),
+  node: FunctionLike
+) {
+  const { types: t } = babel;
+  return assignReturnType(
+    t.arrowFunctionExpression(
+      node.params as (Identifier | RestElement | Pattern)[],
+      node.body,
+      node.async,
+    ),
+    node.returnType
+  );
 }
 
 /**

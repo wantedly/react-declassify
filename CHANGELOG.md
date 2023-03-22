@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Added
+  - Add support for more type annotations on methods
+
 ## 0.1.5
 
 - Added

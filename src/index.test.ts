@@ -445,14 +445,24 @@ describe("react-declassify", () => {
             return null;
           }
 
-          foo = (x) => {
+          foo = (x) => x + 42;
+          bar = (x) => {
             return x + 42;
-          }
+          };
+          baz = function(x) {
+            return x + 42;
+          };
         }
       `;
       const output = dedent`\
         const C = () => {
-          function foo(x) {
+          const foo = x => x + 42;
+
+          const bar = x => {
+            return x + 42;
+          };
+
+          function baz(x) {
             return x + 42;
           }
 
@@ -604,6 +614,38 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("transforms method types", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            return null;
+          }
+
+          foo(x: number): number {
+            return x + 42;
+          }
+
+          bar: MyHandler = (x) => {
+            return x + 42;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C: React.FC = () => {
+          function foo(x: number): number {
+            return x + 42;
+          }
+
+          const bar: MyHandler = x => {
+            return x + 42;
+          };
+
+          return null;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
   });
 
   describe("State transformation", () => {
@@ -731,9 +773,9 @@ describe("react-declassify", () => {
         const C = () => {
           const [foo, setFoo] = React.useState();
 
-          function reset() {
+          const reset = () => {
             setFoo(42);
-          }
+          };
         };
       `;
       expect(transform(input)).toBe(output);

@@ -1,5 +1,5 @@
 import type { NodePath, PluginPass } from "@babel/core";
-import type { ArrayPattern, AssignmentPattern, CallExpression, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Identifier, JSXOpeningElement, MemberExpression, NewExpression, ObjectMethod, ObjectPattern, ObjectProperty, OptionalCallExpression, RestElement, StaticBlock, StringLiteral, TaggedTemplateExpression, TSDeclareMethod, TSExpressionWithTypeArguments, TSImportType, TSInstantiationExpression, TSMethodSignature, TSPropertySignature, TSTypeAnnotation, TSTypeParameterInstantiation, TSTypeQuery, TSTypeReference } from "@babel/types";
+import type { ArrayPattern, ArrowFunctionExpression, AssignmentPattern, CallExpression, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, FunctionDeclaration, FunctionExpression, Identifier, JSXOpeningElement, MemberExpression, NewExpression, Noop, ObjectMethod, ObjectPattern, ObjectProperty, OptionalCallExpression, RestElement, StaticBlock, StringLiteral, TaggedTemplateExpression, TSDeclareFunction, TSDeclareMethod, TSExpressionWithTypeArguments, TSImportType, TSInstantiationExpression, TSMethodSignature, TSPropertySignature, TSTypeAnnotation, TSTypeParameterInstantiation, TSTypeQuery, TSTypeReference, TypeAnnotation } from "@babel/types";
 
 export function getOr<K, V>(m: Map<K, V>, k: K, getDefault: () => V): V {
   if (m.has(k)) {
@@ -93,6 +93,18 @@ export function assignTypeAnnotation<T extends Annotatable>(
 ): T {
   return Object.assign(node, {
     typeAnnotation,
+  });
+}
+
+type ReturnTypeable =
+  FunctionDeclaration | FunctionExpression | TSDeclareFunction | ArrowFunctionExpression | ObjectMethod | ClassMethod | ClassPrivateMethod | TSDeclareMethod;
+
+export function assignReturnType<T extends ReturnTypeable>(
+  node: T,
+  returnType: TypeAnnotation | TSTypeAnnotation | Noop | null | undefined,
+): T {
+  return Object.assign(node, {
+    returnType,
   });
 }
 
