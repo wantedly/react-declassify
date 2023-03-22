@@ -224,6 +224,15 @@ Check the render method of `C`.
 
 or you receive some sort of null error (e.g. `Cannot read properties of undefined (reading 'a')`) because `ref.current` is always undefined.
 
+Type errors can also occur at `useRef` in a component that uses the component under transformation:
+
+```
+test.tsx:1:1 - error TS2749: 'C' refers to a value, but is being used as a type here. Did you mean 'typeof C'?
+
+41 const component = React.useRef<C | null>(null);
+                                  ~
+```
+
 #### Cause
 
 Class components receives refs, and the ref points to the instance of the class. Functional components do not receive refs by default.
