@@ -3,6 +3,7 @@
 - Added
   - Add support for more type annotations on methods
   - Add support for modifying types reflecting `defaultProps`
+  - Add support for `React.PureComponent`
 
 ## 0.1.5
 

@@ -147,9 +147,9 @@ export const C = props => {
 ## Progress
 
 - [x] Convert render function (basic feature)
-- [ ] Superclass detection
+- [x] Superclass detection
   - [x] Support `React.Component`
-  - [ ] Support `React.PureComponent`
+  - [x] Support `React.PureComponent`
 - [ ] Class node type
   - [x] Support class declarations
   - [x] Support `export default class` declarations

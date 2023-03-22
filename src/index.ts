@@ -77,7 +77,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
 }
 
 type TransformResult = {
-  funcNode: ArrowFunctionExpression;
+  funcNode: Expression;
   typeNode?: TSType | undefined;
 };
 
@@ -311,11 +311,24 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   }
   const bodyNode = body.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
-  return {
-    funcNode: t.arrowFunctionExpression(
+  const functionNeeded = head.isPure;
+  const funcNode = functionNeeded
+    ? t.functionExpression(
+      head.name ? t.cloneNode(head.name) : undefined,
       needsProps(body) ? [t.identifier("props")] : [],
       bodyNode
-    ),
+    )
+    : t.arrowFunctionExpression(
+      needsProps(body) ? [t.identifier("props")] : [],
+      bodyNode
+    );
+  return {
+    funcNode: head.isPure
+      ? t.callExpression(
+          getReactImport("memo", babel, head.superClassRef),
+          [funcNode]
+        )
+      : funcNode,
     typeNode: ts
       ? t.tsTypeReference(
         toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
