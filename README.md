@@ -196,3 +196,44 @@ export const C = props => {
   - [ ] Transform the second parameter for the legacy `contextTypes`
 - [ ] Transform `static propTypes` to assignments
 - [x] Rename local variables in `render` if necessary
+
+## Known limitations
+
+### Class refs
+
+Symptom: you get the following type error:
+
+```
+test.tsx:1:1 - error TS2322: Type '{ ... }' is not assignable to type 'IntrinsicAttributes & Props'.
+  Property 'ref' does not exist on type 'IntrinsicAttributes & Props'.
+
+1 ref={ref}
+  ~~~
+```
+
+Cause: class components receives refs, and the ref points to the instance of the class. Functional components do not receive refs by default.
+
+Solution: this is not implemented now. However, once it is implemented you can opt in ref support by certain directives. It will generate `forwardRef` + `useImperativeHandle` to expose necessary APIs.
+
+### Stricter render types
+
+Symptom: you get the following type error:
+
+```
+test.tsx:1:1 - error TS2322: Type '(props: Props) => ReactNode' is not assignable to type 'FC<Props>'.
+  Type 'ReactNode' is not assignable to type 'ReactElement<any, any> | null'.
+
+1 const C: React.FC<Props> = (props) => {
+        ~
+```
+
+Cause: in DefinitelyTyped, `React.FC` is typed slightly stricter than the `render` method. You are expected a single element or `null`.
+
+We leave this untransformed because it is known not to cause problems at runtime. An extra layer of a frament `<> ... </>` suffices to fix the type error.
+
+## Assumptions
+
+- It assumes that the component only needs to reference the latest values of `this.props` or `this.state`. This assumption is necessary because there is a difference between class components and funtion components in how the callbacks capture props or states. To transform the code in an idiomatic way, this assumption is necessary.
+- It assumes, by default, the component is always instantiated without refs.
+- It assumes that the methods always receive the same `this` value as the one when the method is referenced.
+- It assumes that the component does not update the state conditionally by supplying `undefined` to `this.setState`. We need to replace various functionalities associated with `this` with alternative tools and the transformation relies on the fact that the value of `this` is stable all across the class lifecycle.
