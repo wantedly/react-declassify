@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.6
+
 - Added
   - Add support for more type annotations on methods
   - Add support for modifying types reflecting `defaultProps`
