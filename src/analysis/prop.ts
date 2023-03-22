@@ -1,11 +1,12 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { Expression, MemberExpression } from "@babel/types";
+import type { Expression, MemberExpression, TSMethodSignature, TSPropertySignature } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
+import { ComponentHead } from "./head.js";
 
 export type PropsObjAnalysis = {
   hasDefaults: boolean;
@@ -23,6 +24,7 @@ export type PropAnalysis = {
   sites: PropSite[];
   aliases: PropAlias[];
   needsAlias: boolean;
+  typing?: NodePath<TSPropertySignature | TSMethodSignature> | undefined;
 };
 
 export type PropsObjSite = {
@@ -56,6 +58,7 @@ export function analyzeProps(
   propsObjSites: ThisFieldSite[],
   defaultPropsObjSites: StaticFieldSite[],
   locals: LocalManager,
+  head: ComponentHead,
 ): PropsObjAnalysis {
   const defaultProps = analyzeDefaultProps(defaultPropsObjSites);
   const newObjSites: PropsObjSite[] = [];
@@ -89,6 +92,9 @@ export function analyzeProps(
         throw new AnalysisError(`Non-analyzable this.props in presence of defaultProps`);
       }
     }
+  }
+  for (const [name, propTyping] of head.propsEach) {
+    getProp(name).typing = propTyping;
   }
   if (defaultProps) {
     for (const [name, defaultValue] of defaultProps) {

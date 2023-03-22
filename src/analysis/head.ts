@@ -6,6 +6,7 @@ import { analyzeLibRef, isReactRef, LibRef } from "./lib.js";
 export type ComponentHead = {
   superClassRef: LibRef;
   props: NodePath<TSType> | undefined;
+  propsEach: Map<string, NodePath<TSPropertySignature | TSMethodSignature>>;
   states: Map<string, NodePath<TSPropertySignature | TSMethodSignature>>;
 };
 
@@ -35,36 +36,46 @@ export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | u
   }
   if (superClassRef.name === "Component" || superClassRef.name === "PureComponent") {
     let props: NodePath<TSType> | undefined;
-    const states = new Map<string, NodePath<TSPropertySignature | TSMethodSignature>>();
+    let propsEach: Map<string, NodePath<TSPropertySignature | TSMethodSignature>> | undefined = undefined;
+    let states: Map<string, NodePath<TSPropertySignature | TSMethodSignature>> | undefined = undefined;
     const superTypeParameters = path.get("superTypeParameters");
     if (superTypeParameters.isTSTypeParameterInstantiation()) {
       const params = superTypeParameters.get("params");
       if (params.length > 0) {
         props = params[0];
+        propsEach = decompose(params[0]!);
       }
       if (params.length > 1) {
         const stateParamPath = params[1]!;
-        const statePath = resolveAlias(stateParamPath);
-        const members =
-          statePath.isTSTypeLiteral()
-          ? statePath.get("members")
-          : statePath.isTSInterfaceBody()
-          ? statePath.get("body")
-          : undefined;
-        if (members) {
-          for (const member of members) {
-            if (member.isTSPropertySignature() || member.isTSMethodSignature()) {
-              const name = memberName(member.node);
-              if (name != null) {
-                states.set(name, member);
-              }
-            }
-          }
+        states = decompose(stateParamPath);
+      }
+    }
+    propsEach ??= new Map();
+    states ??= new Map();
+    return { superClassRef, props, propsEach, states };
+  }
+}
+
+function decompose(path: NodePath<TSType>): Map<string, NodePath<TSPropertySignature | TSMethodSignature>> {
+  const aliasPath = resolveAlias(path);
+  const members =
+    aliasPath.isTSTypeLiteral()
+    ? aliasPath.get("members")
+    : aliasPath.isTSInterfaceBody()
+    ? aliasPath.get("body")
+    : undefined;
+  const decomposed = new Map<string, NodePath<TSPropertySignature | TSMethodSignature>>();
+  if (members) {
+    for (const member of members) {
+      if (member.isTSPropertySignature() || member.isTSMethodSignature()) {
+        const name = memberName(member.node);
+        if (name != null) {
+          decomposed.set(name, member);
         }
       }
     }
-    return { superClassRef, props, states };
   }
+  return decomposed;
 }
 
 function resolveAlias(path: NodePath<TSType>): NodePath<TSType | TSInterfaceBody> {

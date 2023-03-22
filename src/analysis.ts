@@ -78,7 +78,7 @@ export function analyzeBody(
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals);
+  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals, head);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
       propAnalysis.newAliasName = locals.newLocal(

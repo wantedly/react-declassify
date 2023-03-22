@@ -77,7 +77,7 @@ After:
 import React from "react";
 
 type Props = {
-  by: number;
+  by?: number | undefined
 };
 
 type State = {
@@ -160,7 +160,7 @@ export const C = props => {
   - [x] Transform `S` type argument
   - [x] Transform ref types
   - [ ] Transform generic components
-  - [ ] Modify Props appropriately if defaultProps is present
+  - [x] Modify Props appropriately if defaultProps is present
   - [ ] Modify Props appropriately if `children` seems to be used
 - [ ] Support for `this.props`
   - [x] Convert `this.props` to `props` parameter

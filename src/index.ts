@@ -1,6 +1,6 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { assignReturnType, assignTypeAnnotation, assignTypeParameters, importName, isTS } from "./utils.js";
+import { assignReturnType, assignTypeAnnotation, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
@@ -114,6 +114,35 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     for (const site of body.props.sites) {
       // this.props -> props
       site.path.replaceWith(site.path.node.property);
+    }
+  }
+  for (const [, prop] of body.props.props) {
+    if (prop.defaultValue && prop.typing) {
+      // Make the prop optional
+      prop.typing.node.optional = true;
+      if (prop.typing.isTSPropertySignature()) {
+        const typeAnnotation = nonNullPath(prop.typing.get("typeAnnotation"))?.get("typeAnnotation");
+        if (typeAnnotation) {
+          if (typeAnnotation.isTSUnionType()) {
+            if (typeAnnotation.node.types.some((t) => t.type === "TSUndefinedKeyword")) {
+              // No need to add undefined
+            } else {
+              typeAnnotation.node.types.push(t.tsUndefinedKeyword());
+            }
+          } else {
+            typeAnnotation.replaceWith(t.tsUnionType([
+              typeAnnotation.node,
+              t.tsUndefinedKeyword(),
+            ]))
+          }
+        }
+      }
+      if (
+        prop.typing.node.type === "TSPropertySignature"
+        && prop.typing.node.typeAnnotation
+      ) {
+        const typeAnnot = prop.typing.node.typeAnnotation
+      }
     }
   }
   for (const [name, stateAnalysis] of body.state) {

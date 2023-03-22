@@ -615,6 +615,46 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("Transforms types for defaultProps", () => {
+      const input = dedent`\
+        type Props = {
+          foo: number;
+          bar: number;
+          baz: number;
+          quux: number;
+        };
+        class C extends React.Component<Props> {
+          static defaultProps = {
+            foo: 42,
+            quux: 0,
+          };
+          render() {
+            const { foo, bar } = this.props;
+            return foo + bar + this.props.baz + this.props.quux;
+          }
+        }
+      `;
+      const output = dedent`\
+        type Props = {
+          foo?: number | undefined
+          bar: number;
+          baz: number;
+          quux?: number | undefined
+        };
+
+        const C: React.FC<Props> = props => {
+          const {
+            foo = 42,
+            bar,
+            baz,
+            quux = 0
+          } = props;
+          return foo + bar + baz + quux;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
+
     it("transforms method types", () => {
       const input = dedent`\
         class C extends React.Component {
@@ -1025,7 +1065,7 @@ describe("react-declassify", () => {
       import React from "react";
 
       type Props = {
-        by: number;
+        by?: number | undefined
       };
 
       type State = {
