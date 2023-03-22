@@ -159,7 +159,7 @@ export const C = props => {
   - [x] Transform `P` type argument
   - [x] Transform `S` type argument
   - [x] Transform ref types
-  - [ ] Transform generic components
+  - [x] Transform generic components
   - [x] Modify Props appropriately if defaultProps is present
   - [ ] Modify Props appropriately if `children` seems to be used
 - [ ] Support for `this.props`

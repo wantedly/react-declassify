@@ -1,10 +1,11 @@
 import type { NodePath } from "@babel/core";
-import type { BlockStatement, ClassDeclaration, Identifier, Program, TSInterfaceBody, TSMethodSignature, TSPropertySignature, TSType } from "@babel/types";
-import { memberName } from "../utils.js";
+import type { BlockStatement, ClassDeclaration, Identifier, Program, TSInterfaceBody, TSMethodSignature, TSPropertySignature, TSType, TSTypeParameterDeclaration } from "@babel/types";
+import { memberName, nonNullPath } from "../utils.js";
 import { analyzeLibRef, isReactRef, LibRef } from "./lib.js";
 
 export type ComponentHead = {
   name?: Identifier | undefined;
+  typeParameters?: NodePath<TSTypeParameterDeclaration> | undefined;
   superClassRef: LibRef;
   isPure: boolean;
   props: NodePath<TSType> | undefined;
@@ -38,6 +39,8 @@ export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | u
   }
   if (superClassRef.name === "Component" || superClassRef.name === "PureComponent") {
     const name = path.node.id;
+    const typeParameters_ = nonNullPath(path.get("typeParameters"));
+    const typeParameters = typeParameters_?.isTSTypeParameterDeclaration() ? typeParameters_ : undefined;
     const isPure = superClassRef.name === "PureComponent";
     let props: NodePath<TSType> | undefined;
     let propsEach: Map<string, NodePath<TSPropertySignature | TSMethodSignature>> | undefined = undefined;
@@ -56,7 +59,7 @@ export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | u
     }
     propsEach ??= new Map();
     states ??= new Map();
-    return { name, superClassRef, isPure, props, propsEach, states };
+    return { name, typeParameters, superClassRef, isPure, props, propsEach, states };
   }
 }
 

@@ -1,6 +1,6 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { assignReturnType, assignTypeAnnotation, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
+import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
@@ -25,10 +25,10 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
               declPath.replaceWithMultiple([
                 t.variableDeclaration("const", [
                   t.variableDeclarator(
-                    ts
+                    typeNode
                     ? assignTypeAnnotation(
                       t.cloneNode(path.node.id),
-                      t.tsTypeAnnotation(typeNode!),
+                      t.tsTypeAnnotation(typeNode),
                     )
                     : t.cloneNode(path.node.id),
                     funcNode,
@@ -54,10 +54,10 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             path.replaceWith(t.variableDeclaration("const", [
               t.variableDeclarator(
-                ts
+                typeNode
                 ? assignTypeAnnotation(
                   t.cloneNode(path.node.id),
-                  t.tsTypeAnnotation(typeNode!),
+                  t.tsTypeAnnotation(typeNode),
                 )
                 : t.cloneNode(path.node.id),
                 funcNode,
@@ -221,7 +221,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
           t.identifier(field.localSetterName!),
         ]),
         ts && field.typeAnnotation ?
-          assignTypeParameters(
+          assignTypeArguments(
             call,
             t.tsTypeParameterInstantiation([
               field.typeAnnotation.type === "method"
@@ -278,7 +278,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
         [t.variableDeclarator(
           t.identifier(field.localName!),
           ts && field.typeAnnotation
-            ? assignTypeParameters(
+            ? assignTypeArguments(
               call,
               t.tsTypeParameterInstantiation([
                 field.typeAnnotation.node
@@ -298,7 +298,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
         [t.variableDeclarator(
           t.identifier(field.localName!),
           ts && field.typeAnnotation
-            ? assignTypeParameters(
+            ? assignTypeArguments(
               call,
               t.tsTypeParameterInstantiation([
                 field.typeAnnotation.node
@@ -311,17 +311,49 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   }
   const bodyNode = body.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
-  const functionNeeded = head.isPure;
-  const funcNode = functionNeeded
-    ? t.functionExpression(
-      head.name ? t.cloneNode(head.name) : undefined,
-      needsProps(body) ? [t.identifier("props")] : [],
-      bodyNode
-    )
-    : t.arrowFunctionExpression(
-      needsProps(body) ? [t.identifier("props")] : [],
-      bodyNode
-    );
+  // recast is not smart enough to correctly pretty-print type parameters for arrow functions.
+  // so we fall back to functions when type parameters are present.
+  const functionNeeded = head.isPure || !!head.typeParameters;
+  const params = needsProps(body)
+    ? [assignTypeAnnotation(
+        t.identifier("props"),
+        // If the function is generic, put type annotations here instead of the `const` to be defined.
+        // TODO: take children into account, while being careful about difference between `@types/react` v17 and v18
+        head.typeParameters
+        ? head.props
+          ? t.tsTypeAnnotation(head.props.node)
+          : undefined
+        : undefined
+      )]
+    : [];
+  // If the function is generic, put type annotations here instead of the `const` to be defined.
+  const returnType = head.typeParameters
+      // Construct `React.ReactElement | null`
+    ? t.tsTypeAnnotation(
+        t.tsUnionType([
+          t.tsTypeReference(
+            toTSEntity(getReactImport("ReactElement", babel, head.superClassRef), babel)
+          ),
+          t.tsNullKeyword(),
+        ])
+      )
+    : undefined;
+  const funcNode = assignTypeParameters(
+    assignReturnType(
+      functionNeeded
+        ? t.functionExpression(
+          head.name ? t.cloneNode(head.name) : undefined,
+          params,
+          bodyNode
+        )
+        : t.arrowFunctionExpression(
+          params,
+          bodyNode
+        ),
+      returnType
+    ),
+    head.typeParameters?.node
+  );
   return {
     funcNode: head.isPure
       ? t.callExpression(
@@ -329,7 +361,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
           [funcNode]
         )
       : funcNode,
-    typeNode: ts
+    typeNode: ts && !head.typeParameters
       ? t.tsTypeReference(
         toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
         head.props

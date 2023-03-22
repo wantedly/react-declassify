@@ -94,6 +94,29 @@ describe("react-declassify", () => {
       `;
       expect(transform(input, { ts: true })).toBe(output);
     });
+
+    it("transforms type parameters", () => {
+      const input = dedent`\
+        type Props<T> = {
+          text: T;
+        };
+        class C<T> extends React.Component<Props<T>> {
+          render() {
+            return <div>Hello, {this.props.text}!</div>;
+          }
+        }
+      `;
+      const output = dedent`\
+        type Props<T> = {
+          text: T;
+        };
+
+        const C = function C<T>(props: Props<T>): React.ReactElement | null {
+          return <div>Hello, {props.text}!</div>;
+        };
+      `;
+      expect(transform(input, { ts: true })).toBe(output);
+    });
   });
 
   it("doesn't transform empty Component class", () => {

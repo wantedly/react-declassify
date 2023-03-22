@@ -1,5 +1,5 @@
 import type { NodePath, PluginPass } from "@babel/core";
-import type { ArrayPattern, ArrowFunctionExpression, AssignmentPattern, CallExpression, ClassAccessorProperty, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, FunctionDeclaration, FunctionExpression, Identifier, JSXOpeningElement, MemberExpression, NewExpression, Noop, ObjectMethod, ObjectPattern, ObjectProperty, OptionalCallExpression, RestElement, StaticBlock, StringLiteral, TaggedTemplateExpression, TSDeclareFunction, TSDeclareMethod, TSExpressionWithTypeArguments, TSImportType, TSInstantiationExpression, TSMethodSignature, TSPropertySignature, TSTypeAnnotation, TSTypeParameterInstantiation, TSTypeQuery, TSTypeReference, TypeAnnotation } from "@babel/types";
+import type { ArrayPattern, ArrowFunctionExpression, AssignmentPattern, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassExpression, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, FunctionDeclaration, FunctionExpression, Identifier, JSXOpeningElement, MemberExpression, NewExpression, Noop, ObjectMethod, ObjectPattern, ObjectProperty, OptionalCallExpression, RestElement, StaticBlock, StringLiteral, TaggedTemplateExpression, TSCallSignatureDeclaration, TSConstructorType, TSConstructSignatureDeclaration, TSDeclareFunction, TSDeclareMethod, TSExpressionWithTypeArguments, TSFunctionType, TSImportType, TSInstantiationExpression, TSInterfaceDeclaration, TSMethodSignature, TSPropertySignature, TSTypeAliasDeclaration, TSTypeAnnotation, TSTypeParameterDeclaration, TSTypeParameterInstantiation, TSTypeQuery, TSTypeReference, TypeAnnotation } from "@babel/types";
 
 export function getOr<K, V>(m: Map<K, V>, k: K, getDefault: () => V): V {
   if (m.has(k)) {
@@ -109,9 +109,21 @@ export function assignReturnType<T extends ReturnTypeable>(
 }
 
 type Paramable =
-  CallExpression | NewExpression | TaggedTemplateExpression | OptionalCallExpression | JSXOpeningElement | TSTypeReference | TSTypeQuery | TSExpressionWithTypeArguments | TSInstantiationExpression | TSImportType;
+  FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | TSDeclareFunction | ObjectMethod | ClassMethod | ClassPrivateMethod | TSDeclareMethod | ClassDeclaration | ClassExpression | TSCallSignatureDeclaration | TSConstructSignatureDeclaration | TSMethodSignature | TSFunctionType | TSConstructorType | TSInterfaceDeclaration | TSTypeAliasDeclaration;
 
 export function assignTypeParameters<T extends Paramable>(
+  node: T,
+  typeParameters: TSTypeParameterDeclaration | null | undefined,
+): T {
+  return Object.assign(node, {
+    typeParameters,
+  });
+}
+
+type Arguable =
+  CallExpression | NewExpression | TaggedTemplateExpression | OptionalCallExpression | JSXOpeningElement | TSTypeReference | TSTypeQuery | TSExpressionWithTypeArguments | TSInstantiationExpression | TSImportType;
+
+export function assignTypeArguments<T extends Arguable>(
   node: T,
   typeParameters: TSTypeParameterInstantiation | null | undefined,
 ): T {
