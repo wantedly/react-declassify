@@ -201,7 +201,9 @@ export const C = props => {
 
 ### Class refs
 
-Symptom: you get the following type error:
+#### Symptom
+
+You get the following type error:
 
 ```
 test.tsx:1:1 - error TS2322: Type '{ ... }' is not assignable to type 'IntrinsicAttributes & Props'.
@@ -211,13 +213,30 @@ test.tsx:1:1 - error TS2322: Type '{ ... }' is not assignable to type 'Intrinsic
   ~~~
 ```
 
-Cause: class components receives refs, and the ref points to the instance of the class. Functional components do not receive refs by default.
+or you receive the following warning in the console:
 
-Solution: this is not implemented now. However, once it is implemented you can opt in ref support by certain directives. It will generate `forwardRef` + `useImperativeHandle` to expose necessary APIs.
+```
+Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?
+
+Check the render method of `C`.
+    at App
+```
+
+or you receive some sort of null error (e.g. `Cannot read properties of undefined (reading 'a')`) because `ref.current` is always undefined.
+
+#### Cause
+
+Class components receives refs, and the ref points to the instance of the class. Functional components do not receive refs by default.
+
+#### Solution
+
+This is not implemented now. However, once it is implemented you can opt in ref support by certain directives. It will generate `forwardRef` + `useImperativeHandle` to expose necessary APIs.
 
 ### Stricter render types
 
-Symptom: you get the following type error:
+### Symptom
+
+You get the following type error:
 
 ```
 test.tsx:1:1 - error TS2322: Type '(props: Props) => ReactNode' is not assignable to type 'FC<Props>'.
@@ -227,9 +246,15 @@ test.tsx:1:1 - error TS2322: Type '(props: Props) => ReactNode' is not assignabl
         ~
 ```
 
-Cause: in DefinitelyTyped, `React.FC` is typed slightly stricter than the `render` method. You are expected a single element or `null`.
+### Cause
 
-We leave this untransformed because it is known not to cause problems at runtime. An extra layer of a frament `<> ... </>` suffices to fix the type error.
+In DefinitelyTyped, `React.FC` is typed slightly stricter than the `render` method. You are expected a single element or `null`.
+
+We leave this untransformed because it is known not to cause problems at runtime.
+
+### Solution
+
+An extra layer of a frament `<> ... </>` suffices to fix the type error.
 
 ## Assumptions
 
