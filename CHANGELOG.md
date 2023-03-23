@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Fixed
+  - Use function declaration instead of function expression when possible
+
 ## 0.1.6
 
 - Added

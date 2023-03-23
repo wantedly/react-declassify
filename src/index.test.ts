@@ -111,9 +111,9 @@ describe("react-declassify", () => {
           text: T;
         };
 
-        const C = function C<T>(props: Props<T>): React.ReactElement | null {
+        function C<T>(props: Props<T>): React.ReactElement | null {
           return <div>Hello, {props.text}!</div>;
-        };
+        }
       `;
       expect(transform(input, { ts: true })).toBe(output);
     });

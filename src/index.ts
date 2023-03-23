@@ -1,4 +1,4 @@
-import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation } from "@babel/types";
+import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
 import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
@@ -22,18 +22,15 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             const body = analyzeBody(path, head);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
             if (path.node.id) {
+              // Necessary to avoid false error regarding duplicate declaration.
+              path.scope.removeBinding(path.node.id.name);
               declPath.replaceWithMultiple([
-                t.variableDeclaration("const", [
-                  t.variableDeclarator(
-                    typeNode
-                    ? assignTypeAnnotation(
-                      t.cloneNode(path.node.id),
-                      t.tsTypeAnnotation(typeNode),
-                    )
-                    : t.cloneNode(path.node.id),
-                    funcNode,
-                  )
-                ]),
+                constDeclaration(
+                  babel,
+                  t.cloneNode(path.node.id),
+                  funcNode,
+                  typeNode ? t.tsTypeAnnotation(typeNode) : undefined
+                ),
                 t.exportDefaultDeclaration(
                   t.cloneNode(path.node.id)
                 )
@@ -52,17 +49,16 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           try {
             const body = analyzeBody(path, head);
             const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
-            path.replaceWith(t.variableDeclaration("const", [
-              t.variableDeclarator(
-                typeNode
-                ? assignTypeAnnotation(
-                  t.cloneNode(path.node.id),
-                  t.tsTypeAnnotation(typeNode),
-                )
-                : t.cloneNode(path.node.id),
+            // Necessary to avoid false error regarding duplicate declaration.
+            path.scope.removeBinding(path.node.id.name);
+            path.replaceWith(
+              constDeclaration(
+                babel,
+                t.cloneNode(path.node.id),
                 funcNode,
+                typeNode ? t.tsTypeAnnotation(typeNode) : undefined
               )
-            ]));
+            );
           } catch (e) {
             if (!(e instanceof AnalysisError)) {
               throw e;
@@ -437,19 +433,22 @@ function functionDeclarationFrom(
   name?: Identifier | null
 ) {
   const { types: t } = babel;
-  return assignReturnType(
-    t.functionDeclaration(
-      name ?? functionName(node),
-      node.params as (Identifier | RestElement | Pattern)[],
-      node.body.type === "BlockStatement"
-      ? node.body
-      : t.blockStatement([
-          t.returnStatement(node.body)
-        ]),
-      node.generator,
-      node.async,
+  return assignTypeParameters(
+    assignReturnType(
+      t.functionDeclaration(
+        name ?? functionName(node),
+        node.params as (Identifier | RestElement | Pattern)[],
+        node.body.type === "BlockStatement"
+        ? node.body
+        : t.blockStatement([
+            t.returnStatement(node.body)
+          ]),
+        node.generator,
+        node.async,
+      ),
+      node.returnType
     ),
-    node.returnType
+    node.typeParameters as TSTypeParameterDeclaration | null | undefined
   );
 }
 
@@ -459,19 +458,22 @@ function functionExpressionFrom(
   name?: Identifier | null
 ) {
   const { types: t } = babel;
-  return assignReturnType(
-    t.functionExpression(
-      name ?? functionName(node),
-      node.params as (Identifier | RestElement | Pattern)[],
-      node.body.type === "BlockStatement"
-      ? node.body
-      : t.blockStatement([
-          t.returnStatement(node.body)
-        ]),
-      node.generator,
-      node.async,
+  return assignTypeParameters(
+    assignReturnType(
+      t.functionExpression(
+        name ?? functionName(node),
+        node.params as (Identifier | RestElement | Pattern)[],
+        node.body.type === "BlockStatement"
+        ? node.body
+        : t.blockStatement([
+            t.returnStatement(node.body)
+          ]),
+        node.generator,
+        node.async,
+      ),
+      node.returnType
     ),
-    node.returnType
+    node.typeParameters as TSTypeParameterDeclaration | null | undefined
   );
 }
 
@@ -480,13 +482,39 @@ function arrowFunctionExpressionFrom(
   node: FunctionLike
 ) {
   const { types: t } = babel;
-  return assignReturnType(
-    t.arrowFunctionExpression(
-      node.params as (Identifier | RestElement | Pattern)[],
-      node.body,
-      node.async,
+  return assignTypeParameters(
+    assignReturnType(
+      t.arrowFunctionExpression(
+        node.params as (Identifier | RestElement | Pattern)[],
+        node.body,
+        node.async,
+      ),
+      node.returnType
     ),
-    node.returnType
+    node.typeParameters as TSTypeParameterDeclaration | null | undefined
+  );
+}
+
+function constDeclaration(
+  babel: typeof import("@babel/core"),
+  id: Identifier,
+  init: Expression,
+  typeAnnotation?: TSTypeAnnotation,
+): VariableDeclaration | FunctionDeclaration {
+  const { types: t } = babel;
+  if (
+    init.type === "FunctionExpression"
+    && (!init.id || init.id.name === id.name)
+    && !typeAnnotation
+  ) {
+    return functionDeclarationFrom(babel, init, id);
+  }
+  return t.variableDeclaration(
+    "const",
+    [t.variableDeclarator(
+      assignTypeAnnotation(id, typeAnnotation),
+      init
+    )]
   );
 }
 
