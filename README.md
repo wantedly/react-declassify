@@ -144,6 +144,74 @@ export const C = props => {
 };
 ```
 
+## Configuration
+
+### Disabling transformation
+
+Adding to the class a comment including `react-declassify-disable` will disable transformation of that class.
+
+```js
+/* react-declassify-disable */
+class MyComponent extends React.Component {}
+```
+
+Marking the component class as `abstract` or `/** @abstract */` also disables transformation.
+
+### Import style
+
+The codemod follows your import style from the `extends` clause. So
+
+```js
+import React from "react";
+
+class MyComponent extends React.Component {}
+```
+
+is transformed to
+
+```js
+import React from "react";
+
+const MyComponent: React.FC = () => {};
+```
+
+whereas
+
+```js
+import { Component } from "react";
+
+class MyComponent extends Component {}
+```
+
+is transformed to
+
+```js
+import { Component, FC } from "react";
+
+const MyComponent: FC = () => {};
+```
+
+It cannot be configured to mix these styles. For example it cannot emit `React.FC` for typing while emitting `useState` (not `React.useState`) for hooks.
+
+### Receiving refs
+
+Class components may receive refs; this is to be supported in the future. Once it is implemented, you will be able to add special directives in the component to enable the feature.
+
+### Syntactic styles
+
+This codemod relies on [recast](https://github.com/benjamn/recast) for pretty-printing and sometimes generates code that does not match your preferred style. This is ineviable. For example it does not currently emit parentheses for the arrow function:
+
+```js
+const MyComponent: FC = props => {
+  //                    ^^^^^ no parentheses
+  // ...
+};
+```
+
+We have no control over this choice. Even if it were possible, allowing configurations on styles would make the codemod unnecessarily complex.
+
+If you need to enforce specific styles, use Prettier or ESLint or whatever is your favorite to reformat the code after you apply the transformation.
+
 ## Progress
 
 - [x] Convert render function (basic feature)
