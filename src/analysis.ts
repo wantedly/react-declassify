@@ -30,7 +30,7 @@ const SPECIAL_STATIC_NAMES = new Set<string>([
   "getDerivedStateFromProps",
 ]);
 
-export type ComponentBody = {
+export type AnalysisResult = {
   locals: LocalManager,
   render: RenderAnalysis;
   state: StateObjAnalysis;
@@ -38,10 +38,10 @@ export type ComponentBody = {
   userDefined: UserDefinedAnalysis;
 };
 
-export function analyzeBody(
+export function analyzeClass(
   path: NodePath<ClassDeclaration>,
   preanalysis: PreAnalysisResult
-): ComponentBody {
+): AnalysisResult {
   const locals = new LocalManager(path);
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
 
@@ -167,6 +167,6 @@ function analyzeOuterCapturings(classPath: NodePath<ClassDeclaration>, locals: L
   return capturings;
 }
 
-export function needsProps(body: ComponentBody): boolean {
-  return body.props.sites.length > 0;
+export function needsProps(analysis: AnalysisResult): boolean {
+  return analysis.props.sites.length > 0;
 }

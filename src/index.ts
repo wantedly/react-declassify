@@ -1,7 +1,7 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
-import { AnalysisError, analyzeBody, preanalyzeClass, ComponentBody, PreAnalysisResult, needsProps, LibRef } from "./analysis.js";
+import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
 
@@ -19,8 +19,8 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         if (path.parentPath.isExportDefaultDeclaration()) {
           const declPath = path.parentPath;
           try {
-            const body = analyzeBody(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(preanalysis, body, { ts }, babel);
+            const analysis = analyzeClass(path, preanalysis);
+            const { funcNode, typeNode } = transformClass(preanalysis, analysis, { ts }, babel);
             if (path.node.id) {
               // Necessary to avoid false error regarding duplicate declaration.
               path.scope.removeBinding(path.node.id.name);
@@ -47,8 +47,8 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           }
         } else {
           try {
-            const body = analyzeBody(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(preanalysis, body, { ts }, babel);
+            const analysis = analyzeClass(path, preanalysis);
+            const { funcNode, typeNode } = transformClass(preanalysis, analysis, { ts }, babel);
             // Necessary to avoid false error regarding duplicate declaration.
             path.scope.removeBinding(path.node.id.name);
             path.replaceWith(
@@ -77,11 +77,11 @@ type TransformResult = {
   typeNode?: TSType | undefined;
 };
 
-function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
+function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
   const { types: t } = babel;
   const { ts } = options;
 
-  for (const [, prop] of body.props.props) {
+  for (const [, prop] of analysis.props.props) {
     for (const alias of prop.aliases) {
       if (alias.localName !== prop.newAliasName!) {
         // Rename variables that props are bound to.
@@ -91,28 +91,28 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       }
     }
   }
-  for (const path of body.locals.removePaths) {
+  for (const path of analysis.locals.removePaths) {
     path.remove();
   }
-  for (const ren of body.render.renames) {
+  for (const ren of analysis.render.renames) {
     // Rename local variables in the render method
     // to avoid unintentional variable capturing.
     ren.scope.rename(ren.oldName, ren.newName);
   }
-  if (body.props.hasDefaults) {
-    for (const [, prop] of body.props.props) {
+  if (analysis.props.hasDefaults) {
+    for (const [, prop] of analysis.props.props) {
       for (const site of prop.sites) {
         // this.props.foo -> foo
         site.path.replaceWith(t.identifier(prop.newAliasName!));
       }
     }
   } else {
-    for (const site of body.props.sites) {
+    for (const site of analysis.props.sites) {
       // this.props -> props
       site.path.replaceWith(site.path.node.property);
     }
   }
-  for (const [, prop] of body.props.props) {
+  for (const [, prop] of analysis.props.props) {
     if (prop.defaultValue && prop.typing) {
       // Make the prop optional
       prop.typing.node.optional = true;
@@ -141,7 +141,7 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       }
     }
   }
-  for (const [name, stateAnalysis] of body.state) {
+  for (const [name, stateAnalysis] of analysis.state) {
     for (const site of stateAnalysis.sites) {
       if (site.type === "expr") {
         // this.state.foo -> foo
@@ -157,7 +157,7 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       }
     }
   }
-  for (const [, field] of body.userDefined.fields) {
+  for (const [, field] of analysis.userDefined.fields) {
     if (field.type === "user_defined_function" || field.type === "user_defined_ref") {
       for (const site of field.sites) {
         if (site.type === "expr") {
@@ -181,7 +181,7 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
   }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
-  const propsWithAlias = Array.from(body.props.props).filter(([, prop]) => prop.needsAlias);
+  const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) => prop.needsAlias);
   if (propsWithAlias.length > 0) {
     // Expand this.props into variables.
     // E.g. const { foo, bar } = props;
@@ -204,7 +204,7 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       ),
     ]));
   }
-  for (const field of body.state.values()) {
+  for (const field of analysis.state.values()) {
     // State declarations
     const call = t.callExpression(
       getReactImport("useState", babel, preanalysis.superClassRef),
@@ -233,7 +233,7 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       )
     ]))
   }
-  for (const [, field] of body.userDefined.fields) {
+  for (const [, field] of analysis.userDefined.fields) {
     if (field.type === "user_defined_function") {
       // Method definitions.
       if (field.init.type === "method") {
@@ -305,12 +305,12 @@ function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, opt
       ))
     }
   }
-  const bodyNode = body.render.path.node.body;
+  const bodyNode = analysis.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
   // recast is not smart enough to correctly pretty-print type parameters for arrow functions.
   // so we fall back to functions when type parameters are present.
   const functionNeeded = preanalysis.isPure || !!preanalysis.typeParameters;
-  const params = needsProps(body)
+  const params = needsProps(analysis)
     ? [assignTypeAnnotation(
         t.identifier("props"),
         // If the function is generic, put type annotations here instead of the `const` to be defined.
