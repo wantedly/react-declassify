@@ -6,7 +6,7 @@ import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
-import { ComponentHead } from "./head.js";
+import { PreAnalysisResult } from "./head.js";
 
 export type PropsObjAnalysis = {
   hasDefaults: boolean;
@@ -58,7 +58,7 @@ export function analyzeProps(
   propsObjSites: ThisFieldSite[],
   defaultPropsObjSites: StaticFieldSite[],
   locals: LocalManager,
-  head: ComponentHead,
+  preanalysis: PreAnalysisResult,
 ): PropsObjAnalysis {
   const defaultProps = analyzeDefaultProps(defaultPropsObjSites);
   const newObjSites: PropsObjSite[] = [];
@@ -93,7 +93,7 @@ export function analyzeProps(
       }
     }
   }
-  for (const [name, propTyping] of head.propsEach) {
+  for (const [name, propTyping] of preanalysis.propsEach) {
     getProp(name).typing = propTyping;
   }
   if (defaultProps) {

@@ -1,7 +1,7 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
-import { AnalysisError, analyzeBody, analyzeHead, ComponentBody, ComponentHead, needsProps, LibRef } from "./analysis.js";
+import { AnalysisError, analyzeBody, preanalyzeClass, ComponentBody, PreAnalysisResult, needsProps, LibRef } from "./analysis.js";
 
 type Options = {};
 
@@ -12,15 +12,15 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
     visitor: {
       ClassDeclaration(path, state) {
         const ts = isTS(state);
-        const head = analyzeHead(path);
-        if (!head) {
+        const preanalysis = preanalyzeClass(path);
+        if (!preanalysis) {
           return;
         }
         if (path.parentPath.isExportDefaultDeclaration()) {
           const declPath = path.parentPath;
           try {
-            const body = analyzeBody(path, head);
-            const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
+            const body = analyzeBody(path, preanalysis);
+            const { funcNode, typeNode } = transformClass(preanalysis, body, { ts }, babel);
             if (path.node.id) {
               // Necessary to avoid false error regarding duplicate declaration.
               path.scope.removeBinding(path.node.id.name);
@@ -47,8 +47,8 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           }
         } else {
           try {
-            const body = analyzeBody(path, head);
-            const { funcNode, typeNode } = transformClass(head, body, { ts }, babel);
+            const body = analyzeBody(path, preanalysis);
+            const { funcNode, typeNode } = transformClass(preanalysis, body, { ts }, babel);
             // Necessary to avoid false error regarding duplicate declaration.
             path.scope.removeBinding(path.node.id.name);
             path.replaceWith(
@@ -77,7 +77,7 @@ type TransformResult = {
   typeNode?: TSType | undefined;
 };
 
-function transformClass(head: ComponentHead, body: ComponentBody, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
+function transformClass(preanalysis: PreAnalysisResult, body: ComponentBody, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
   const { types: t } = babel;
   const { ts } = options;
 
@@ -207,7 +207,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   for (const field of body.state.values()) {
     // State declarations
     const call = t.callExpression(
-      getReactImport("useState", babel, head.superClassRef),
+      getReactImport("useState", babel, preanalysis.superClassRef),
       field.init ? [field.init.valuePath.node] : []
     );
     preamble.push(t.variableDeclaration("const", [
@@ -266,7 +266,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     } else if (field.type === "user_defined_ref") {
       // const foo = useRef(null);
       const call = t.callExpression(
-        getReactImport("useRef", babel, head.superClassRef),
+        getReactImport("useRef", babel, preanalysis.superClassRef),
         [t.nullLiteral()]
       );
       preamble.push(t.variableDeclaration(
@@ -286,7 +286,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     } else if (field.type === "user_defined_direct_ref") {
       // const foo = useRef(init);
       const call = t.callExpression(
-        getReactImport("useRef", babel, head.superClassRef),
+        getReactImport("useRef", babel, preanalysis.superClassRef),
         [field.init.node]
       );
       preamble.push(t.variableDeclaration(
@@ -309,26 +309,26 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
   bodyNode.body.splice(0, 0, ...preamble);
   // recast is not smart enough to correctly pretty-print type parameters for arrow functions.
   // so we fall back to functions when type parameters are present.
-  const functionNeeded = head.isPure || !!head.typeParameters;
+  const functionNeeded = preanalysis.isPure || !!preanalysis.typeParameters;
   const params = needsProps(body)
     ? [assignTypeAnnotation(
         t.identifier("props"),
         // If the function is generic, put type annotations here instead of the `const` to be defined.
         // TODO: take children into account, while being careful about difference between `@types/react` v17 and v18
-        head.typeParameters
-        ? head.props
-          ? t.tsTypeAnnotation(head.props.node)
+        preanalysis.typeParameters
+        ? preanalysis.props
+          ? t.tsTypeAnnotation(preanalysis.props.node)
           : undefined
         : undefined
       )]
     : [];
   // If the function is generic, put type annotations here instead of the `const` to be defined.
-  const returnType = head.typeParameters
+  const returnType = preanalysis.typeParameters
       // Construct `React.ReactElement | null`
     ? t.tsTypeAnnotation(
         t.tsUnionType([
           t.tsTypeReference(
-            toTSEntity(getReactImport("ReactElement", babel, head.superClassRef), babel)
+            toTSEntity(getReactImport("ReactElement", babel, preanalysis.superClassRef), babel)
           ),
           t.tsNullKeyword(),
         ])
@@ -338,7 +338,7 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
     assignReturnType(
       functionNeeded
         ? t.functionExpression(
-          head.name ? t.cloneNode(head.name) : undefined,
+          preanalysis.name ? t.cloneNode(preanalysis.name) : undefined,
           params,
           bodyNode
         )
@@ -348,20 +348,20 @@ function transformClass(head: ComponentHead, body: ComponentBody, options: { ts:
         ),
       returnType
     ),
-    head.typeParameters?.node
+    preanalysis.typeParameters?.node
   );
   return {
-    funcNode: head.isPure
+    funcNode: preanalysis.isPure
       ? t.callExpression(
-          getReactImport("memo", babel, head.superClassRef),
+          getReactImport("memo", babel, preanalysis.superClassRef),
           [funcNode]
         )
       : funcNode,
-    typeNode: ts && !head.typeParameters
+    typeNode: ts && !preanalysis.typeParameters
       ? t.tsTypeReference(
-        toTSEntity(getReactImport("FC", babel, head.superClassRef), babel),
-        head.props
-        ? t.tsTypeParameterInstantiation([head.props.node])
+        toTSEntity(getReactImport("FC", babel, preanalysis.superClassRef), babel),
+        preanalysis.props
+        ? t.tsTypeParameterInstantiation([preanalysis.props.node])
         : null
       )
       : undefined,

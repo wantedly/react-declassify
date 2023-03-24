@@ -2,7 +2,7 @@ import type { NodePath } from "@babel/core";
 import type { CallExpression, Expression, Identifier, ObjectProperty, RestElement, TSType } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
-import { ComponentHead } from "./head.js";
+import { PreAnalysisResult } from "./head.js";
 import type { LocalManager } from "./local.js";
 import type { ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
@@ -47,7 +47,7 @@ export function analyzeState(
   stateObjSites: ThisFieldSite[],
   setStateSites: ThisFieldSite[],
   locals: LocalManager,
-  head: ComponentHead,
+  preanalysis: PreAnalysisResult,
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
   const getState = (name: string) => getOr(states, name, () => ({
@@ -151,7 +151,7 @@ export function analyzeState(
       throw new AnalysisError(`Non-analyzable setState`);
     }
   }
-  for (const [name, stateType] of head.states) {
+  for (const [name, stateType] of preanalysis.states) {
     const state = getState(name);
     if (stateType.isTSPropertySignature()) {
       const annot = stateType.get("typeAnnotation");

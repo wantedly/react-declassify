@@ -8,15 +8,15 @@ import { getAndDelete } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
-import { ComponentHead } from "./analysis/head.js";
+import { PreAnalysisResult } from "./analysis/head.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
 export type { LibRef } from "./analysis/lib.js";
 export type {
-  ComponentHead
+  PreAnalysisResult
 } from "./analysis/head.js";
-export { analyzeHead } from "./analysis/head.js";
+export { preanalyzeClass } from "./analysis/head.js";
 export type { LocalManager } from "./analysis/local.js";
 export type { StateObjAnalysis } from "./analysis/state.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
@@ -40,7 +40,7 @@ export type ComponentBody = {
 
 export function analyzeBody(
   path: NodePath<ClassDeclaration>,
-  head: ComponentHead
+  preanalysis: PreAnalysisResult
 ): ComponentBody {
   const locals = new LocalManager(path);
   const { thisFields: sites, staticFields } = analyzeThisFields(path);
@@ -50,7 +50,7 @@ export function analyzeBody(
 
   const stateObjSites = getAndDelete(sites, "state") ?? [];
   const setStateSites = getAndDelete(sites, "setState") ?? [];
-  const states = analyzeState(stateObjSites, setStateSites, locals, head);
+  const states = analyzeState(stateObjSites, setStateSites, locals, preanalysis);
 
   const renderSites = getAndDelete(sites, "render") ?? [];
 
@@ -78,7 +78,7 @@ export function analyzeBody(
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals, head);
+  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals, preanalysis);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
       propAnalysis.newAliasName = locals.newLocal(

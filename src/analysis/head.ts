@@ -3,7 +3,7 @@ import type { BlockStatement, ClassDeclaration, Identifier, Program, TSInterface
 import { memberName, nonNullPath } from "../utils.js";
 import { analyzeLibRef, isReactRef, LibRef } from "./lib.js";
 
-export type ComponentHead = {
+export type PreAnalysisResult = {
   name?: Identifier | undefined;
   typeParameters?: NodePath<TSTypeParameterDeclaration> | undefined;
   superClassRef: LibRef;
@@ -13,7 +13,7 @@ export type ComponentHead = {
   states: Map<string, NodePath<TSPropertySignature | TSMethodSignature>>;
 };
 
-export function analyzeHead(path: NodePath<ClassDeclaration>): ComponentHead | undefined {
+export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisResult | undefined {
   if (path.node.leadingComments?.some((comment) => /react-declassify-disable/.test(comment.value))) {
     // Explicitly disabled
     return;
