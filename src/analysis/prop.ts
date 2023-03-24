@@ -6,7 +6,7 @@ import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
 import { StaticFieldSite, ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";
-import { PreAnalysisResult } from "./head.js";
+import { PreAnalysisResult } from "./pre.js";
 
 export type PropsObjAnalysis = {
   hasDefaults: boolean;

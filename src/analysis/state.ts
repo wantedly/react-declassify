@@ -2,7 +2,7 @@ import type { NodePath } from "@babel/core";
 import type { CallExpression, Expression, Identifier, ObjectProperty, RestElement, TSType } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
-import { PreAnalysisResult } from "./head.js";
+import { PreAnalysisResult } from "./pre.js";
 import type { LocalManager } from "./local.js";
 import type { ThisFieldSite } from "./this_fields.js";
 import { trackMember } from "./track_member.js";

@@ -8,15 +8,15 @@ import { getAndDelete } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
-import { PreAnalysisResult } from "./analysis/head.js";
+import { PreAnalysisResult } from "./analysis/pre.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
 export type { LibRef } from "./analysis/lib.js";
 export type {
   PreAnalysisResult
-} from "./analysis/head.js";
-export { preanalyzeClass } from "./analysis/head.js";
+} from "./analysis/pre.js";
+export { preanalyzeClass } from "./analysis/pre.js";
 export type { LocalManager } from "./analysis/local.js";
 export type { StateObjAnalysis } from "./analysis/state.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
