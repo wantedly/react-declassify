@@ -20,7 +20,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           const declPath = path.parentPath;
           try {
             const analysis = analyzeClass(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(preanalysis, analysis, { ts }, babel);
+            const { funcNode, typeNode } = transformClass(analysis, { ts }, babel);
             if (path.node.id) {
               // Necessary to avoid false error regarding duplicate declaration.
               path.scope.removeBinding(path.node.id.name);
@@ -48,7 +48,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
         } else {
           try {
             const analysis = analyzeClass(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(preanalysis, analysis, { ts }, babel);
+            const { funcNode, typeNode } = transformClass(analysis, { ts }, babel);
             // Necessary to avoid false error regarding duplicate declaration.
             path.scope.removeBinding(path.node.id.name);
             path.replaceWith(
@@ -77,7 +77,7 @@ type TransformResult = {
   typeNode?: TSType | undefined;
 };
 
-function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
+function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
   const { types: t } = babel;
   const { ts } = options;
 
@@ -207,7 +207,7 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
   for (const field of analysis.state.values()) {
     // State declarations
     const call = t.callExpression(
-      getReactImport("useState", babel, preanalysis.superClassRef),
+      getReactImport("useState", babel, analysis.superClassRef),
       field.init ? [field.init.valuePath.node] : []
     );
     preamble.push(t.variableDeclaration("const", [
@@ -266,7 +266,7 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
     } else if (field.type === "user_defined_ref") {
       // const foo = useRef(null);
       const call = t.callExpression(
-        getReactImport("useRef", babel, preanalysis.superClassRef),
+        getReactImport("useRef", babel, analysis.superClassRef),
         [t.nullLiteral()]
       );
       preamble.push(t.variableDeclaration(
@@ -286,7 +286,7 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
     } else if (field.type === "user_defined_direct_ref") {
       // const foo = useRef(init);
       const call = t.callExpression(
-        getReactImport("useRef", babel, preanalysis.superClassRef),
+        getReactImport("useRef", babel, analysis.superClassRef),
         [field.init.node]
       );
       preamble.push(t.variableDeclaration(
@@ -309,26 +309,26 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
   bodyNode.body.splice(0, 0, ...preamble);
   // recast is not smart enough to correctly pretty-print type parameters for arrow functions.
   // so we fall back to functions when type parameters are present.
-  const functionNeeded = preanalysis.isPure || !!preanalysis.typeParameters;
+  const functionNeeded = analysis.isPure || !!analysis.typeParameters;
   const params = needsProps(analysis)
     ? [assignTypeAnnotation(
         t.identifier("props"),
         // If the function is generic, put type annotations here instead of the `const` to be defined.
         // TODO: take children into account, while being careful about difference between `@types/react` v17 and v18
-        preanalysis.typeParameters
-        ? preanalysis.props
-          ? t.tsTypeAnnotation(preanalysis.props.node)
+        analysis.typeParameters
+        ? analysis.propsTyping
+          ? t.tsTypeAnnotation(analysis.propsTyping.node)
           : undefined
         : undefined
       )]
     : [];
   // If the function is generic, put type annotations here instead of the `const` to be defined.
-  const returnType = preanalysis.typeParameters
+  const returnType = analysis.typeParameters
       // Construct `React.ReactElement | null`
     ? t.tsTypeAnnotation(
         t.tsUnionType([
           t.tsTypeReference(
-            toTSEntity(getReactImport("ReactElement", babel, preanalysis.superClassRef), babel)
+            toTSEntity(getReactImport("ReactElement", babel, analysis.superClassRef), babel)
           ),
           t.tsNullKeyword(),
         ])
@@ -338,7 +338,7 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
     assignReturnType(
       functionNeeded
         ? t.functionExpression(
-          preanalysis.name ? t.cloneNode(preanalysis.name) : undefined,
+          analysis.name ? t.cloneNode(analysis.name) : undefined,
           params,
           bodyNode
         )
@@ -348,20 +348,20 @@ function transformClass(preanalysis: PreAnalysisResult, analysis: AnalysisResult
         ),
       returnType
     ),
-    preanalysis.typeParameters?.node
+    analysis.typeParameters?.node
   );
   return {
-    funcNode: preanalysis.isPure
+    funcNode: analysis.isPure
       ? t.callExpression(
-          getReactImport("memo", babel, preanalysis.superClassRef),
+          getReactImport("memo", babel, analysis.superClassRef),
           [funcNode]
         )
       : funcNode,
-    typeNode: ts && !preanalysis.typeParameters
+    typeNode: ts && !analysis.typeParameters
       ? t.tsTypeReference(
-        toTSEntity(getReactImport("FC", babel, preanalysis.superClassRef), babel),
-        preanalysis.props
-        ? t.tsTypeParameterInstantiation([preanalysis.props.node])
+        toTSEntity(getReactImport("FC", babel, analysis.superClassRef), babel),
+        analysis.propsTyping
+        ? t.tsTypeParameterInstantiation([analysis.propsTyping.node])
         : null
       )
       : undefined,

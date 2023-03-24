@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { ClassDeclaration, ClassMethod, Identifier, JSXIdentifier } from "@babel/types";
+import type { ClassDeclaration, ClassMethod, Identifier, JSXIdentifier, TSType, TSTypeParameterDeclaration } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
 import { analyzeThisFields } from "./analysis/this_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
@@ -8,7 +8,8 @@ import { getAndDelete } from "./utils.js";
 import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
-import { PreAnalysisResult } from "./analysis/pre.js";
+import type { PreAnalysisResult } from "./analysis/pre.js";
+import type { LibRef } from "./analysis/lib.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -31,7 +32,12 @@ const SPECIAL_STATIC_NAMES = new Set<string>([
 ]);
 
 export type AnalysisResult = {
-  locals: LocalManager,
+  name?: Identifier | undefined;
+  typeParameters?: NodePath<TSTypeParameterDeclaration> | undefined;
+  superClassRef: LibRef;
+  isPure: boolean;
+  propsTyping: NodePath<TSType> | undefined;
+  locals: LocalManager;
   render: RenderAnalysis;
   state: StateObjAnalysis;
   props: PropsObjAnalysis;
@@ -101,6 +107,11 @@ export function analyzeClass(
   }
 
   return {
+    name: preanalysis.name,
+    typeParameters: preanalysis.typeParameters,
+    superClassRef: preanalysis.superClassRef,
+    isPure: preanalysis.isPure,
+    propsTyping: preanalysis.props,
     locals,
     render,
     state: states,
