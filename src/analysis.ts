@@ -5,9 +5,9 @@ import { AnalysisError } from "./analysis/error.js";
 import { analyzeClassFields } from "./analysis/class_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete } from "./utils.js";
-import { analyzeProps, PropsObjAnalysis } from "./analysis/prop.js";
+import { analyzeProps, needAlias, PropsObjAnalysis } from "./analysis/prop.js";
 import { LocalManager, RemovableNode } from "./analysis/local.js";
-import { analyzeUserDefined, UserDefinedAnalysis } from "./analysis/user_defined.js";
+import { analyzeUserDefined, postAnalyzeCallbackDependencies, UserDefinedAnalysis } from "./analysis/user_defined.js";
 import type { PreAnalysisResult } from "./analysis/pre.js";
 import type { LibRef } from "./analysis/lib.js";
 
@@ -20,6 +20,7 @@ export type {
 export { preanalyzeClass } from "./analysis/pre.js";
 export type { LocalManager } from "./analysis/local.js";
 export type { StateObjAnalysis } from "./analysis/state.js";
+export { needAlias } from "./analysis/prop.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
 
 const SPECIAL_STATIC_NAMES = new Set<string>([
@@ -85,8 +86,15 @@ export function analyzeClass(
     throw new AnalysisError(`Missing render method`);
   }
   const props = analyzeProps(propsObjAnalysis, defaultPropsObjAnalysis, locals, preanalysis);
+  postAnalyzeCallbackDependencies(
+    userDefined,
+    props,
+    states,
+    sites,
+  );
+
   for (const [name, propAnalysis] of props.props) {
-    if (propAnalysis.needsAlias) {
+    if (needAlias(propAnalysis)) {
       propAnalysis.newAliasName = locals.newLocal(
         name,
         propAnalysis.sites.map((site) => site.path)

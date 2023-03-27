@@ -1,9 +1,11 @@
 import type { NodePath } from "@babel/core";
 import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionExpression, TSType } from "@babel/types";
-import { isClassMethodLike, nonNullPath } from "../utils.js";
+import { getOr, isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
 import type { ClassFieldAnalysis, ClassFieldSite } from "./class_fields.js";
+import { PropsObjAnalysis } from "./prop.js";
+import { StateObjAnalysis } from "./state.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
   // Special variables
@@ -64,6 +66,8 @@ export type UserDefinedFn = {
   init: FnInit;
   typeAnnotation?: NodePath<TSType> | undefined;
   sites: ClassFieldSite[];
+  needMemo: boolean;
+  dependencies: CallbackDependency[];
 };
 
 export type FnInit = {
@@ -72,6 +76,33 @@ export type FnInit = {
 } | {
   type: "func_def";
   initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
+};
+
+export type CallbackDependency =
+  | CallbackDependencyPropsObj
+  | CallbackDependencyProp
+  | CallbackDependencyPropAlias
+  | CallbackDependencyState
+  | CallbackDependencyFn;
+
+export type CallbackDependencyPropsObj = {
+  type: "dep_props_obj";
+};
+export type CallbackDependencyProp = {
+  type: "dep_prop";
+  name: string;
+};
+export type CallbackDependencyPropAlias = {
+  type: "dep_prop_alias";
+  name: string;
+};
+export type CallbackDependencyState = {
+  type: "dep_state";
+  name: string;
+};
+export type CallbackDependencyFn = {
+  type: "dep_function";
+  name: string;
 };
 
 export function analyzeUserDefined(
@@ -163,6 +194,9 @@ export function analyzeUserDefined(
         init: fnInit,
         typeAnnotation: valInitType,
         sites: field.sites,
+        // set to true in the later analysis
+        needMemo: false,
+        dependencies: [],
       });
     } else if (isRefInit && !hasWrite) {
       fields.set(name, {
@@ -181,5 +215,174 @@ export function analyzeUserDefined(
       throw new AnalysisError(`Cannot transform this.${name}`);
     }
   }
-  return { fields };
+
+  // Analysis for `useCallback` inference
+  // preDependencies: dependency between methods
+  const preDependencies = new Map<string, string[]>();
+  // It's actually a stack but either is fine
+  const queue: string[] = [];
+  // First loop: analyze preDependencies and memo requirement
+  for (const [name, field]  of instanceFields) {
+    const ud = fields.get(name)!;
+    if (ud.type !== "user_defined_function") {
+      continue;
+    }
+    for (const site of field.sites) {
+      if (site.type === "expr" && site.owner != null) {
+        const ownerField = fields.get(site.owner);
+        if (ownerField?.type === "user_defined_function") {
+          getOr(preDependencies, site.owner, () => []).push(name);
+        }
+      }
+      if (site.type === "expr") {
+        const path1 = site.path.parentPath;
+        // If it is directly called, memoization is not necessary for this expression.
+        if (!path1.isCallExpression()) {
+          if (!ud.needMemo) {
+            queue.push(name);
+            ud.needMemo = true;
+          }
+        }
+      }
+    }
+  }
+  // Do a search (BFS or DFS) to expand needMemo frontier
+  while (queue.length > 0) {
+    const name = queue.pop()!;
+    for (const depName of preDependencies.get(name) ?? []) {
+      const depUD = fields.get(depName)!;
+      if (depUD.type === "user_defined_function" && !depUD.needMemo) {
+        queue.push(depName);
+        depUD.needMemo = true;
+      }
+    }
+  }
+  // Teorder fields in the order of dependency
+  // while keepping the original order otherwise.
+  // This is done with a typical topological sort
+  const reorderedFields = new Map<string, UserDefined>();
+  const reorderVisited = new Set<string>();
+  function addReorderedField(name: string) {
+    if (reorderedFields.has(name)) {
+      return;
+    }
+    if (reorderVisited.has(name)) {
+      throw new AnalysisError("Recursive dependency in memoized methods");
+    }
+    reorderVisited.add(name);
+
+    const ud = fields.get(name);
+    if (ud?.type === "user_defined_function" && ud.needMemo) {
+      for (const depName of preDependencies.get(name) ?? []) {
+        if (fields.get(depName)?.type === "user_defined_function") {
+          addReorderedField(depName);
+        }
+      }
+    }
+
+    reorderedFields.set(name, fields.get(name)!);
+  }
+  for (const [name] of fields) {
+    addReorderedField(name);
+  }
+
+  return { fields: reorderedFields };
+}
+
+export function postAnalyzeCallbackDependencies(
+  userDefined: UserDefinedAnalysis,
+  props: PropsObjAnalysis,
+  states: StateObjAnalysis,
+  instanceFields: Map<string, ClassFieldAnalysis>,
+) {
+  for (const [name, prop] of props.props) {
+    for (const alias of prop.aliases) {
+      if (alias.owner == null) {
+        continue;
+      }
+      const ownerField = userDefined.fields.get(alias.owner);
+      if (ownerField?.type !== "user_defined_function") {
+        continue;
+      }
+      ownerField.dependencies.push({
+        type: "dep_prop_alias",
+        name,
+      });
+    }
+    for (const site of prop.sites) {
+      if (site.owner == null) {
+        continue;
+      }
+      const ownerField = userDefined.fields.get(site.owner);
+      if (ownerField?.type !== "user_defined_function") {
+        continue;
+      }
+
+      if (site.path.parentPath.isCallExpression()) {
+        // Special case for `this.props.onClick()`:
+        // Always try to decompose it to avoid false eslint-plugin-react-hooks exhaustive-deps warning.
+        site.enabled = true;
+      }
+      if (site.enabled) {
+        ownerField.dependencies.push({
+          type: "dep_prop_alias",
+          name,
+        });
+      } else {
+        ownerField.dependencies.push({
+          type: "dep_prop",
+          name,
+        });
+      }
+    }
+  }
+  for (const site of props.sites) {
+    if (site.owner == null || site.child || site.decomposedAsAliases) {
+      continue;
+    }
+    const ownerField = userDefined.fields.get(site.owner);
+    if (ownerField?.type !== "user_defined_function") {
+      continue;
+    }
+
+    ownerField.dependencies.push({
+      type: "dep_props_obj",
+    });
+  }
+  for (const [name, state] of states) {
+    for (const site of state.sites) {
+      if (site.type !== "expr") {
+        continue;
+      }
+
+      if (site.owner == null) {
+        continue;
+      }
+      const ownerField = userDefined.fields.get(site.owner);
+      if (ownerField?.type !== "user_defined_function") {
+        continue;
+      }
+      ownerField.dependencies.push({
+        type: "dep_state",
+        name,
+      });
+    }
+  }
+  for (const [name, field]  of instanceFields) {
+    const ud = userDefined.fields.get(name)!;
+    if (ud.type !== "user_defined_function") {
+      continue;
+    }
+    for (const site of field.sites) {
+      if (site.type === "expr" && site.owner != null) {
+        const ownerField = userDefined.fields.get(site.owner);
+        if (ownerField?.type === "user_defined_function") {
+          ownerField.dependencies.push({
+            type: "dep_function",
+            name,
+          });
+        }
+      }
+    }
+  }
 }

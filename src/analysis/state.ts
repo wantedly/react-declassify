@@ -27,6 +27,7 @@ export type StateInitSite = {
 export type StateExprSite = {
   type: "expr";
   path: NodePath<Expression>;
+  owner: string | undefined;
 };
 export type SetStateSite = {
   type: "setState";
@@ -103,6 +104,7 @@ export function analyzeState(
           getState(name).sites.push({
             type: "expr",
             path,
+            owner: site.owner,
           });
         }
       }
@@ -110,6 +112,7 @@ export function analyzeState(
       getState(memberAnalysis.memberExpr.name).sites.push({
         type: "expr",
         path: memberAnalysis.memberExpr.path,
+        owner: site.owner,
       });
     } else {
       throw new AnalysisError(`Non-analyzable this.state`);

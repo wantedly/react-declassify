@@ -1,7 +1,7 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
-import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef } from "./analysis.js";
+import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef, needAlias } from "./analysis.js";
 
 type Options = {};
 
@@ -99,15 +99,16 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
     // to avoid unintentional variable capturing.
     ren.scope.rename(ren.oldName, ren.newName);
   }
-  if (analysis.props.hasDefaults) {
-    for (const [, prop] of analysis.props.props) {
-      for (const site of prop.sites) {
+  for (const [, prop] of analysis.props.props) {
+    for (const site of prop.sites) {
+      if (site.enabled) {
         // this.props.foo -> foo
         site.path.replaceWith(t.identifier(prop.newAliasName!));
       }
     }
-  } else {
-    for (const site of analysis.props.sites) {
+  }
+  for (const site of analysis.props.sites) {
+    if (!site.child?.enabled) {
       // this.props -> props
       site.path.replaceWith(site.path.node.property);
     }
@@ -181,7 +182,7 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
   }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
-  const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) => prop.needsAlias);
+  const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) => needAlias(prop));
   if (propsWithAlias.length > 0) {
     // Expand this.props into variables.
     // E.g. const { foo, bar } = props;
@@ -236,33 +237,62 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
   for (const [, field] of analysis.userDefined.fields) {
     if (field.type === "user_defined_function") {
       // Method definitions.
-      if (field.init.type === "method") {
-        const methNode = field.init.path.node;
-        preamble.push(functionDeclarationFrom(babel, methNode, t.identifier(field.localName!)));
-      } else {
-        const methNode = field.init.initPath.node;
-        if (
-          methNode.type === "FunctionExpression"
-          && !field.typeAnnotation
-        ) {
-          preamble.push(functionDeclarationFrom(babel, methNode, t.identifier(field.localName!)));
-        } else {
-          const expr =
-            methNode.type === "FunctionExpression"
-            ? functionExpressionFrom(babel, methNode)
-            : arrowFunctionExpressionFrom(babel, methNode);
-          preamble.push(t.variableDeclaration(
-            "const",
-            [t.variableDeclarator(
-              assignTypeAnnotation(
-                t.identifier(field.localName!),
-                field.typeAnnotation ? t.tsTypeAnnotation(field.typeAnnotation.node) : undefined
-              ),
-              expr
-            )]
-          ));
+      let init: Expression =
+        field.init.type === "method"
+        ? functionExpressionFrom(babel, field.init.path.node, t.identifier(field.localName!))
+        : field.init.initPath.node;
+      if (field.needMemo) {
+        const depVars = new Set<string>();
+        const depProps = new Set<string>();
+        for (const dep of field.dependencies) {
+          switch (dep.type) {
+            case "dep_props_obj":
+              depVars.add("props");
+              break;
+            case "dep_prop":
+              depProps.add(dep.name);
+              break;
+            case "dep_prop_alias": {
+              const prop = analysis.props.props.get(dep.name)!;
+              depVars.add(prop.newAliasName!);
+              break;
+            }
+            case "dep_state": {
+              const state = analysis.state.get(dep.name)!;
+              depVars.add(state.localName!);
+              break;
+            }
+            case "dep_function": {
+              const field = analysis.userDefined.fields.get(dep.name)!;
+              depVars.add(field.localName!);
+              break;
+            }
+          }
         }
+        init = t.callExpression(
+          getReactImport("useCallback", babel, analysis.superClassRef),
+          [
+            init,
+            t.arrayExpression([
+              ...Array.from(depVars).sort().map((name) =>
+                t.identifier(name)
+              ),
+              ...Array.from(depProps).sort().map((name) =>
+                t.memberExpression(
+                  t.identifier("props"),
+                  t.identifier(name)
+                ),
+              )
+            ]),
+          ]
+        )
       }
+      preamble.push(constDeclaration(
+        babel,
+        t.identifier(field.localName!),
+        init,
+        field.typeAnnotation ? t.tsTypeAnnotation(field.typeAnnotation.node) : undefined
+      ));
     } else if (field.type === "user_defined_ref") {
       // const foo = useRef(null);
       const call = t.callExpression(

@@ -479,9 +479,9 @@ describe("react-declassify", () => {
       `;
       const output = dedent`\
         const C = () => {
-          const foo = x => x + 42;
+          const foo = (x) => x + 42;
 
-          const bar = x => {
+          const bar = (x) => {
             return x + 42;
           };
 
@@ -700,7 +700,7 @@ describe("react-declassify", () => {
             return x + 42;
           }
 
-          const bar: MyHandler = x => {
+          const bar: MyHandler = (x) => {
             return x + 42;
           };
 
@@ -708,6 +708,57 @@ describe("react-declassify", () => {
         };
       `;
       expect(transform(input, { ts: true })).toBe(output);
+    });
+
+    it ("memoizes methods if necessary", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            this.bar();
+            return <div onClick={this.foo} />;
+          }
+
+          foo = () => {
+            this.baz();
+          };
+
+          bar = () => {
+            this.baz();
+          };
+
+          baz = () => {
+            const { callbackB, text } = this.props;
+            this.props.callbackA();
+            callbackB(text);
+          };
+        }
+      `;
+      const output = dedent`\
+        const C = props => {
+          const {
+            callbackB,
+            text,
+            callbackA
+          } = props;
+
+          const baz = React.useCallback(() => {
+            callbackA();
+            callbackB(text);
+          }, [callbackA, callbackB, text]);
+
+          const foo = React.useCallback(() => {
+            baz();
+          }, [baz]);
+
+          const bar = () => {
+            baz();
+          };
+
+          bar();
+          return <div onClick={foo} />;
+        };
+      `;
+      expect(transform(input)).toBe(output);
     });
   });
 

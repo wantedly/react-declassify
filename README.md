@@ -239,8 +239,8 @@ If you need to enforce specific styles, use Prettier or ESLint or whatever is yo
 - [ ] Support for user-defined methods
   - [x] Transform methods to `function`s
   - [x] Transform class fields initialized as functions to `function`s
-  - [ ] Use `useCallback` if deemed necessary
-  - [ ] Auto-expand direct callback call (like `this.props.onClick()`) to indirect call
+  - [x] Use `useCallback` if deemed necessary
+  - [x] Auto-expand direct callback call (like `this.props.onClick()`) to indirect call
   - [x] Rename methods if necessary
   - [ ] Skip method-binding expressions (e.g. `onClick={this.onClick.bind(this)}`)
   - [ ] Skip method-binding statements (e.g. `this.onClick = this.onClick.bind(this)`)

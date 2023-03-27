@@ -18,26 +18,30 @@ export type PropsObjAnalysis = {
 export type PropAnalysis = {
   newAliasName?: string | undefined;
   defaultValue?: NodePath<Expression>;
-  /**
-   * present only when there is defaultProps.
-   */
   sites: PropSite[];
   aliases: PropAlias[];
-  needsAlias: boolean;
   typing?: NodePath<TSPropertySignature | TSMethodSignature> | undefined;
 };
 
+// These are mutually linked
 export type PropsObjSite = {
   path: NodePath<MemberExpression>;
+  owner: string | undefined;
+  decomposedAsAliases: boolean;
+  child: PropSite | undefined;
 };
 
 export type PropSite = {
   path: NodePath<MemberExpression>;
+  parent: PropsObjSite;
+  owner: string | undefined;
+  enabled: boolean;
 };
 
 export type PropAlias = {
   scope: Scope,
   localName: string,
+  owner: string | undefined,
 };
 
 /**
@@ -66,30 +70,44 @@ export function analyzeProps(
   const getProp = (name: string) => getOr(props, name, () => ({
     sites: [],
     aliases: [],
-    needsAlias: false,
   }));
 
   for (const site of propsObjAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.props`);
     }
-    newObjSites.push({
-      path: site.path,
-    });
     const memberAnalysis = trackMember(site.path);
+    const parentSite: PropsObjSite = {
+      path: site.path,
+      owner: site.owner,
+      decomposedAsAliases: false,
+      child: undefined,
+    };
+    newObjSites.push(parentSite);
     if (memberAnalysis.fullyDecomposed && memberAnalysis.memberAliases) {
       for (const [name, aliasing] of memberAnalysis.memberAliases) {
         getProp(name).aliases.push({
           scope: aliasing.scope,
           localName: aliasing.localName,
+          owner: site.owner,
         });
         locals.reserveRemoval(aliasing.idPath);
       }
-    } else if (defaultProps) {
-      if (memberAnalysis.memberExpr) {
-        getProp(memberAnalysis.memberExpr.name).sites.push({ path: memberAnalysis.memberExpr.path });
-      } else {
+      parentSite.decomposedAsAliases = true;
+    } else {
+      if (defaultProps && !memberAnalysis.memberExpr) {
         throw new AnalysisError(`Non-analyzable this.props in presence of defaultProps`);
+      }
+      if (memberAnalysis.memberExpr) {
+        const child: PropSite = {
+          path: memberAnalysis.memberExpr.path,
+          parent: parentSite,
+          owner: site.owner,
+          // `enabled` will also be turned on later in callback analysis
+          enabled: !!defaultProps,
+        };
+        parentSite.child = child;
+        getProp(memberAnalysis.memberExpr.name).sites.push(child);
       }
     }
   }
@@ -101,9 +119,6 @@ export function analyzeProps(
       getProp(name).defaultValue = defaultValue;
     }
   }
-  for (const [, prop] of props) {
-    prop.needsAlias = prop.aliases.length > 0 || prop.sites.length > 0;
-  }
   const allAliases = Array.from(props.values()).flatMap((prop) => prop.aliases);
   return {
     hasDefaults: !!defaultProps,
@@ -111,6 +126,10 @@ export function analyzeProps(
     props,
     allAliases,
   };
+}
+
+export function needAlias(prop: PropAnalysis): boolean {
+  return prop.aliases.length > 0 || prop.sites.some((s) => s.enabled);
 }
 
 function analyzeDefaultProps(

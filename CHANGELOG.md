@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added
+  - Add support for `useCallback`
 - Fixed
   - Use function declaration instead of function expression when possible
 

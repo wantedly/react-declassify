@@ -43,6 +43,10 @@ export type ClassFieldDeclSite = {
    */
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
   /**
+   * Where is it referenced in?
+   */
+  owner: string | undefined;
+  /**
    * Type annotation, if any.
    *
    * Param/return annotations attached to function-like implementations are ignored.
@@ -65,6 +69,7 @@ export type ClassFieldExprSite = {
    * The node that accesses the field (both read and write)
    */
   path: NodePath<MemberExpression>;
+  owner: string | undefined;
   typing: undefined;
   init: undefined;
   /**
@@ -112,7 +117,10 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   const staticFields = new Map<string, ClassFieldAnalysis>();
   const getStaticField = (name: string) => getOr(staticFields, name, () => ({ sites: [] }));
   let constructor: NodePath<ClassMethod> | undefined = undefined;
-  const bodies: NodePath[] = [];
+  const bodies: {
+    owner: string | undefined,
+    path: NodePath,
+  }[] = [];
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
     if (isNamedClassElement(itemPath)) {
@@ -133,6 +141,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         field.sites.push({
           type: "decl",
           path: itemPath,
+          owner: undefined,
           typing: typeAnnotation_
             ? {
               type: "type_value",
@@ -145,7 +154,13 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         });
         if (valuePath) {
           // Initializer should be analyzed in step 2 too (considered to be in the constructor)
-          bodies.push(valuePath);
+          bodies.push({
+            owner:
+              valuePath.isFunctionExpression() || valuePath.isArrowFunctionExpression()
+              ? name
+              : undefined,
+            path: valuePath,
+          });
         }
       } else if (isClassMethodOrDecl(itemPath)) {
         // Class method, constructor, getter/setter, or an accessor (those that will be introduced in the decorator proposal).
@@ -156,6 +171,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
           field.sites.push({
             type: "decl",
             path: itemPath,
+            owner: undefined,
             // We put `typing` here only when it is type-only
             typing: itemPath.isTSDeclareMethod()
               ? {
@@ -172,9 +188,15 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
           // Analysis for step 2
           if (isClassMethodLike(itemPath)) {
             for (const paramPath of itemPath.get("params")) {
-               bodies.push(paramPath);
+              bodies.push({
+                owner: name,
+                path: paramPath,
+              });
             }
-            bodies.push(itemPath.get("body"));
+            bodies.push({
+              owner: name,
+              path: itemPath.get("body"),
+            });
           }
         } else if (kind === "get" || kind === "set") {
           throw new AnalysisError(`Not implemented yet: getter / setter`);
@@ -262,6 +284,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
       field.sites.push({
         type: "decl",
         path: exprPath,
+        owner: undefined,
         typing: undefined,
         init: {
           type: "init_value",
@@ -270,12 +293,15 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         hasWrite: undefined,
         hasSideEffect: estimateSideEffect(stmt.node.expression.right),
       });
-      bodies.push(exprPath.get("right"));
+      bodies.push({
+        owner: name,
+        path: exprPath.get("right"),
+      });
     }
   }
 
   // 2nd pass: look for uses within items
-  function traverseItem(path: NodePath) {
+  function traverseItem(owner: string | undefined, path: NodePath) {
     traverseThis(path, (thisPath) => {
       // Ensure this is part of `this.foo`
       const thisMemberPath = thisPath.parentPath;
@@ -306,6 +332,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
 
       field.sites.push({
         type: "expr",
+        owner,
         path: thisMemberPath,
         typing: undefined,
         init: undefined,
@@ -315,7 +342,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     });
   }
   for (const body of bodies) {
-    traverseItem(body);
+    traverseItem(body.owner, body.path);
   }
 
   // Post validation
