@@ -3,7 +3,7 @@ import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, F
 import { isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
-import type { ThisFieldSite } from "./this_fields.js";
+import type { InstanceFieldSite } from "./this_fields.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
   // Special variables
@@ -49,21 +49,21 @@ export type UserDefinedRef = {
   type: "user_defined_ref";
   localName?: string | undefined;
   typeAnnotation?: NodePath<TSType> | undefined;
-  sites: ThisFieldSite[];
+  sites: InstanceFieldSite[];
 };
 export type UserDefinedDirectRef = {
   type: "user_defined_direct_ref";
   localName?: string | undefined;
   init: NodePath<Expression>;
   typeAnnotation?: NodePath<TSType> | undefined;
-  sites: ThisFieldSite[];
+  sites: InstanceFieldSite[];
 };
 export type UserDefinedFn = {
   type: "user_defined_function";
   localName?: string | undefined;
   init: FnInit;
   typeAnnotation?: NodePath<TSType> | undefined;
-  sites: ThisFieldSite[];
+  sites: InstanceFieldSite[];
 };
 
 export type FnInit = {
@@ -75,10 +75,10 @@ export type FnInit = {
 };
 
 export function analyzeUserDefined(
-  thisFields: Map<string, ThisFieldSite[]>
+  instanceFields: Map<string, InstanceFieldSite[]>
 ): UserDefinedAnalysis {
   const fields = new Map<string, UserDefined>();
-  for (const [name, fieldSites]  of thisFields) {
+  for (const [name, fieldSites]  of instanceFields) {
     if (SPECIAL_MEMBER_NAMES.has(name)) {
       throw new AnalysisError(`Cannot transform ${name}`);
     }

@@ -11,9 +11,9 @@ import { AnalysisError } from "./error.js";
 /**
  * Aggregated result of class field analysis.
  */
-export type ThisFields = {
+export type ClassFieldsAnalysis = {
   /** Access to instance fields (`this.foo`), indexed by their names. */
-  thisFields: Map<string, ThisFieldSite[]>;
+  instanceFields: Map<string, InstanceFieldSite[]>;
   /** Access to static fields (`C.foo`, where `C` is the class), indexed by their names. */
   staticFields: Map<string, StaticFieldSite[]>;
 };
@@ -21,7 +21,7 @@ export type ThisFields = {
 /**
  * A place where the instance field is declared or used.
  */
-export type ThisFieldSite = {
+export type InstanceFieldSite = {
   type: "class_field";
   /**
    * Declaration. One of:
@@ -121,9 +121,9 @@ export type StaticFieldSite = {
  * - Instance fields ... `this.foo`
  * - Static fields ... `C.foo`, where `C` is the class
  */
-export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
-  const thisFields = new Map<string, ThisFieldSite[]>();
-  const getThisField = (name: string) => getOr(thisFields, name, () => []);
+export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassFieldsAnalysis {
+  const instanceFields = new Map<string, InstanceFieldSite[]>();
+  const getInstanceField = (name: string) => getOr(instanceFields, name, () => []);
   const staticFields = new Map<string, StaticFieldSite[]>();
   const getStaticField = (name: string) => getOr(staticFields, name, () => []);
   let constructor: NodePath<ClassMethod> | undefined = undefined;
@@ -137,7 +137,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       if (name == null) {
         throw new AnalysisError(`Unnamed class element`);
       }
-      const field = isStatic ? getStaticField(name) : getThisField(name);
+      const field = isStatic ? getStaticField(name) : getInstanceField(name);
       if (isClassPropertyLike(itemPath)) {
         // Class field.
         // - May have an initializer: `foo = 42;` or not: `foo;`
@@ -273,7 +273,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       }
       // TODO: check for parameter/local variable reference
 
-      const field = getThisField(name)!;
+      const field = getInstanceField(name)!;
       field.push({
         type: "class_field",
         path: exprPath,
@@ -305,7 +305,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
         throw new AnalysisError(`Unrecognized this-property reference`);
       }
 
-      const field = getThisField(name)!;
+      const field = getInstanceField(name)!;
 
       const thisMemberParentPath = thisMemberPath.parentPath;
       const hasWrite =
@@ -334,9 +334,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   }
 
   // Post validation
-  for (const [name, fieldSites] of thisFields) {
+  for (const [name, fieldSites] of instanceFields) {
     if (fieldSites.length === 0) {
-      thisFields.delete(name);
+      instanceFields.delete(name);
     }
     const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
@@ -349,7 +349,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   }
   for (const [name, fieldSites] of staticFields) {
     if (fieldSites.length === 0) {
-      thisFields.delete(name);
+      instanceFields.delete(name);
     }
     const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
@@ -361,7 +361,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     }
   }
 
-  return { thisFields, staticFields };
+  return { instanceFields, staticFields };
 }
 
 function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {
