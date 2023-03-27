@@ -22,7 +22,7 @@ export type ClassFieldsAnalysis = {
  * A place where the instance field is declared or used.
  */
 export type InstanceFieldSite = {
-  type: "class_field";
+  type: "decl";
   /**
    * Declaration. One of:
    *
@@ -90,7 +90,7 @@ export type FieldInit = {
  * A place where the static field is declared or used.
  */
 export type StaticFieldSite = {
-  type: "class_field";
+  type: "decl";
   /**
    * Declaration. One of:
    *
@@ -146,7 +146,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         const typeAnnotation = itemPath.get("typeAnnotation");
         const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation() ? typeAnnotation : undefined;
         field.push({
-          type: "class_field",
+          type: "decl",
           path: itemPath,
           typing: typeAnnotation_
             ? {
@@ -169,7 +169,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
           field.push({
-            type: "class_field",
+            type: "decl",
             path: itemPath,
             // We put `typing` here only when it is type-only
             typing: itemPath.isTSDeclareMethod()
@@ -275,7 +275,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
 
       const field = getInstanceField(name)!;
       field.push({
-        type: "class_field",
+        type: "decl",
         path: exprPath,
         typing: undefined,
         init: {
