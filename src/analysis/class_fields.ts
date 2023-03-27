@@ -13,21 +13,26 @@ import { AnalysisError } from "./error.js";
  */
 export type ClassFieldsAnalysis = {
   /** Access to instance fields (`this.foo`), indexed by their names. */
-  instanceFields: Map<string, InstanceFieldSite[]>;
+  instanceFields: Map<string, ClassFieldSite[]>;
   /** Access to static fields (`C.foo`, where `C` is the class), indexed by their names. */
-  staticFields: Map<string, StaticFieldSite[]>;
+  staticFields: Map<string, ClassFieldSite[]>;
 };
 
 /**
- * A place where the instance field is declared or used.
+ * A place where the class field is declared or used.
  */
-export type InstanceFieldSite = {
+export type ClassFieldSite =
+  | ClassFieldDeclSite
+  | ClassFieldExprSite;
+
+export type ClassFieldDeclSite = {
   type: "decl";
   /**
    * Declaration. One of:
    *
    * - Class element (methods, fields, etc.)
-   * - Assignment to `this` in the constructor
+   * - Assignment to `this` in the constructor (instance case)
+   * - Assignment to `this` in a static initialization block (static case)
    */
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
   /**
@@ -45,7 +50,9 @@ export type InstanceFieldSite = {
    * true if the initializer has a side effect.
    */
   hasSideEffect: boolean;
-} | {
+};
+
+export type ClassFieldExprSite = {
   type: "expr";
   /**
    * The node that accesses the field (both read and write)
@@ -87,44 +94,15 @@ export type FieldInit = {
 };
 
 /**
- * A place where the static field is declared or used.
- */
-export type StaticFieldSite = {
-  type: "decl";
-  /**
-   * Declaration. One of:
-   *
-   * - Class element (methods, fields, etc.)
-   * - Assignment to `this` in a static initialization block
-   */
-  path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
-  /**
-   * Type annotation, if any.
-   *
-   * Param/return annotations attached to function-like implementations are ignored.
-   */
-  typing: FieldTyping | undefined;
-  /**
-   * Initializing expression, if any.
-   */
-  init: FieldInit | undefined;
-  hasWrite: undefined;
-  /**
-   * true if the initializer has a side effect.
-   */
-  hasSideEffect: boolean;
-};
-
-/**
  * Collect declarations and uses of the following:
  *
  * - Instance fields ... `this.foo`
  * - Static fields ... `C.foo`, where `C` is the class
  */
 export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassFieldsAnalysis {
-  const instanceFields = new Map<string, InstanceFieldSite[]>();
+  const instanceFields = new Map<string, ClassFieldSite[]>();
   const getInstanceField = (name: string) => getOr(instanceFields, name, () => []);
-  const staticFields = new Map<string, StaticFieldSite[]>();
+  const staticFields = new Map<string, ClassFieldSite[]>();
   const getStaticField = (name: string) => getOr(staticFields, name, () => []);
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   const bodies: NodePath[] = [];

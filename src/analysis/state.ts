@@ -4,7 +4,7 @@ import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { PreAnalysisResult } from "./pre.js";
 import type { LocalManager } from "./local.js";
-import type { InstanceFieldSite } from "./class_fields.js";
+import type { ClassFieldSite } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 
 export type StateObjAnalysis = Map<string, StateAnalysis>;
@@ -44,8 +44,8 @@ export type StateTypeAnnotation = {
 };
 
 export function analyzeState(
-  stateObjSites: InstanceFieldSite[],
-  setStateSites: InstanceFieldSite[],
+  stateObjSites: ClassFieldSite[],
+  setStateSites: ClassFieldSite[],
   locals: LocalManager,
   preanalysis: PreAnalysisResult,
 ): StateObjAnalysis {

@@ -4,7 +4,7 @@ import type { Expression, MemberExpression, TSMethodSignature, TSPropertySignatu
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
-import { StaticFieldSite, InstanceFieldSite } from "./class_fields.js";
+import { ClassFieldSite } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 import { PreAnalysisResult } from "./pre.js";
 
@@ -55,8 +55,8 @@ export type PropAlias = {
  * ```
  */
 export function analyzeProps(
-  propsObjSites: InstanceFieldSite[],
-  defaultPropsObjSites: StaticFieldSite[],
+  propsObjSites: ClassFieldSite[],
+  defaultPropsObjSites: ClassFieldSite[],
   locals: LocalManager,
   preanalysis: PreAnalysisResult,
 ): PropsObjAnalysis {
@@ -114,7 +114,7 @@ export function analyzeProps(
 }
 
 function analyzeDefaultProps(
-  defaultPropsSites: StaticFieldSite[],
+  defaultPropsSites: ClassFieldSite[],
 ): Map<string, NodePath<Expression>> | undefined {
   for (const site of defaultPropsSites) {
     if (!site.init) {
