@@ -56,7 +56,7 @@ export type UserDefinedRef = {
 export type UserDefinedDirectRef = {
   type: "user_defined_direct_ref";
   localName?: string | undefined;
-  init: NodePath<Expression>;
+  init: NodePath<Expression> | undefined;
   typeAnnotation?: NodePath<TSType> | undefined;
   sites: ClassFieldSite[];
 };
@@ -204,15 +204,13 @@ export function analyzeUserDefined(
         typeAnnotation: refInitType1 ?? refInitType2,
         sites: field.sites,
       });
-    } else if (valInit) {
+    } else {
       fields.set(name, {
         type: "user_defined_direct_ref",
         init: valInit,
         typeAnnotation: valInitType,
         sites: field.sites,
       });
-    } else {
-      throw new AnalysisError(`Cannot transform this.${name}`);
     }
   }
 

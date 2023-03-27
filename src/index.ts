@@ -317,7 +317,11 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       // const foo = useRef(init);
       const call = t.callExpression(
         getReactImport("useRef", babel, analysis.superClassRef),
-        [field.init.node]
+        [
+          field.init
+          ? field.init.node
+          : t.identifier("undefined")
+        ]
       );
       preamble.push(t.variableDeclaration(
         "const",

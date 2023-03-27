@@ -991,6 +991,35 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("transforms class field without initializer as useRef", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+          }
+
+          foo() {
+            console.log(this.div);
+          }
+
+          render() {
+            return <div ref={(elem) => this.div = elem} />;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          function foo() {
+            console.log(div.current);
+          }
+
+          const div = React.useRef(undefined);
+          return <div ref={(elem) => div.current = elem} />;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
     it("transforms typed class field as useRef", () => {
       const input = dedent`\
         class C extends React.Component {

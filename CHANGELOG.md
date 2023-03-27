@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Fixed
+  - Don't fail if user-defined class field (e.g. `this.foo`) is assigned without initializing.
+
 ## 0.1.7
 
 - Added
