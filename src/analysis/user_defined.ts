@@ -3,7 +3,7 @@ import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, F
 import { isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
-import type { InstanceFieldSite } from "./this_fields.js";
+import type { InstanceFieldSite } from "./class_fields.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
   // Special variables
