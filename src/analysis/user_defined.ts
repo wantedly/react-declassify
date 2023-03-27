@@ -3,7 +3,7 @@ import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, F
 import { isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
-import type { ClassFieldSite } from "./class_fields.js";
+import type { ClassFieldAnalysis, ClassFieldSite } from "./class_fields.js";
 
 const SPECIAL_MEMBER_NAMES = new Set<string>([
   // Special variables
@@ -75,10 +75,10 @@ export type FnInit = {
 };
 
 export function analyzeUserDefined(
-  instanceFields: Map<string, ClassFieldSite[]>
+  instanceFields: Map<string, ClassFieldAnalysis>
 ): UserDefinedAnalysis {
   const fields = new Map<string, UserDefined>();
-  for (const [name, fieldSites]  of instanceFields) {
+  for (const [name, field]  of instanceFields) {
     if (SPECIAL_MEMBER_NAMES.has(name)) {
       throw new AnalysisError(`Cannot transform ${name}`);
     }
@@ -88,7 +88,7 @@ export function analyzeUserDefined(
     let refInitType2: NodePath<TSType> | undefined = undefined;
     let valInit: NodePath<Expression> | undefined = undefined;
     let valInitType: NodePath<TSType> | undefined = undefined;
-    const initSite = fieldSites.find((site) => site.init);
+    const initSite = field.sites.find((site) => site.init);
     if (initSite) {
       const init = initSite.init!;
       if (isClassMethodLike(initSite.path)) {
@@ -128,7 +128,7 @@ export function analyzeUserDefined(
         valInit = initPath;
       }
     }
-    const typeSite = fieldSites.find((site) => site.typing);
+    const typeSite = field.sites.find((site) => site.typing);
     if (typeSite) {
       const typing = typeSite.typing!;
       if (typing.type === "type_value") {
@@ -156,26 +156,26 @@ export function analyzeUserDefined(
         valInitType = typing.valueTypePath;
       }
     }
-    const hasWrite = fieldSites.some((site) => site.hasWrite);
+    const hasWrite = field.sites.some((site) => site.hasWrite);
     if (fnInit && !hasWrite) {
       fields.set(name, {
         type: "user_defined_function",
         init: fnInit,
         typeAnnotation: valInitType,
-        sites: fieldSites,
+        sites: field.sites,
       });
     } else if (isRefInit && !hasWrite) {
       fields.set(name, {
         type: "user_defined_ref",
         typeAnnotation: refInitType1 ?? refInitType2,
-        sites: fieldSites,
+        sites: field.sites,
       });
     } else if (valInit) {
       fields.set(name, {
         type: "user_defined_direct_ref",
         init: valInit,
         typeAnnotation: valInitType,
-        sites: fieldSites,
+        sites: field.sites,
       });
     } else {
       throw new AnalysisError(`Cannot transform this.${name}`);

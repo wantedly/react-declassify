@@ -13,9 +13,16 @@ import { AnalysisError } from "./error.js";
  */
 export type ClassFieldsAnalysis = {
   /** Access to instance fields (`this.foo`), indexed by their names. */
-  instanceFields: Map<string, ClassFieldSite[]>;
+  instanceFields: Map<string, ClassFieldAnalysis>;
   /** Access to static fields (`C.foo`, where `C` is the class), indexed by their names. */
-  staticFields: Map<string, ClassFieldSite[]>;
+  staticFields: Map<string, ClassFieldAnalysis>;
+};
+
+/**
+ * Result of class field analysis for each field name.
+ */
+export type ClassFieldAnalysis = {
+  sites: ClassFieldSite[];
 };
 
 /**
@@ -100,10 +107,10 @@ export type FieldInit = {
  * - Static fields ... `C.foo`, where `C` is the class
  */
 export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassFieldsAnalysis {
-  const instanceFields = new Map<string, ClassFieldSite[]>();
-  const getInstanceField = (name: string) => getOr(instanceFields, name, () => []);
-  const staticFields = new Map<string, ClassFieldSite[]>();
-  const getStaticField = (name: string) => getOr(staticFields, name, () => []);
+  const instanceFields = new Map<string, ClassFieldAnalysis>();
+  const getInstanceField = (name: string) => getOr(instanceFields, name, () => ({ sites: [] }));
+  const staticFields = new Map<string, ClassFieldAnalysis>();
+  const getStaticField = (name: string) => getOr(staticFields, name, () => ({ sites: [] }));
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   const bodies: NodePath[] = [];
   // 1st pass: look for class field definitions
@@ -123,7 +130,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         const typeAnnotation = itemPath.get("typeAnnotation");
         const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation() ? typeAnnotation : undefined;
-        field.push({
+        field.sites.push({
           type: "decl",
           path: itemPath,
           typing: typeAnnotation_
@@ -146,7 +153,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         // - In TS, it may lack the implementation (i.e. TSDeclareMethod)
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
-          field.push({
+          field.sites.push({
             type: "decl",
             path: itemPath,
             // We put `typing` here only when it is type-only
@@ -252,7 +259,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
       // TODO: check for parameter/local variable reference
 
       const field = getInstanceField(name)!;
-      field.push({
+      field.sites.push({
         type: "decl",
         path: exprPath,
         typing: undefined,
@@ -297,7 +304,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
           argument: thisMemberPath.node,
         })
 
-      field.push({
+      field.sites.push({
         type: "expr",
         path: thisMemberPath,
         typing: undefined,
@@ -312,28 +319,28 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   }
 
   // Post validation
-  for (const [name, fieldSites] of instanceFields) {
-    if (fieldSites.length === 0) {
+  for (const [name, field] of instanceFields) {
+    if (field.sites.length === 0) {
       instanceFields.delete(name);
     }
-    const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
+    const numInits = field.sites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);
     }
-    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.typing), 0);
+    const numTypes = field.sites.reduce((n, site) => n + Number(!!site.typing), 0);
     if (numTypes > 1) {
       throw new AnalysisError(`${name} is declared more than once`);
     }
   }
-  for (const [name, fieldSites] of staticFields) {
-    if (fieldSites.length === 0) {
+  for (const [name, field] of staticFields) {
+    if (field.sites.length === 0) {
       instanceFields.delete(name);
     }
-    const numInits = fieldSites.reduce((n, site) => n + Number(!!site.init), 0);
+    const numInits = field.sites.reduce((n, site) => n + Number(!!site.init), 0);
     if (numInits > 1) {
       throw new AnalysisError(`static ${name} is initialized more than once`);
     }
-    const numTypes = fieldSites.reduce((n, site) => n + Number(!!site.typing), 0);
+    const numTypes = field.sites.reduce((n, site) => n + Number(!!site.typing), 0);
     if (numTypes > 1) {
       throw new AnalysisError(`static ${name} is declared more than once`);
     }

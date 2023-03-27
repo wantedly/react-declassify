@@ -51,22 +51,22 @@ export function analyzeClass(
   const locals = new LocalManager(path);
   const { instanceFields: sites, staticFields } = analyzeClassFields(path);
 
-  const propsObjSites = getAndDelete(sites, "props") ?? [];
-  const defaultPropsObjSites = getAndDelete(staticFields, "defaultProps") ?? [];
+  const propsObjAnalysis = getAndDelete(sites, "props") ?? { sites: [] };
+  const defaultPropsObjAnalysis = getAndDelete(staticFields, "defaultProps") ?? { sites: [] };
 
-  const stateObjSites = getAndDelete(sites, "state") ?? [];
-  const setStateSites = getAndDelete(sites, "setState") ?? [];
-  const states = analyzeState(stateObjSites, setStateSites, locals, preanalysis);
+  const stateObjAnalysis = getAndDelete(sites, "state") ?? { sites: [] };
+  const setStateAnalysis = getAndDelete(sites, "setState") ?? { sites: [] };
+  const states = analyzeState(stateObjAnalysis, setStateAnalysis, locals, preanalysis);
 
-  const renderSites = getAndDelete(sites, "render") ?? [];
+  const renderAnalysis = getAndDelete(sites, "render") ?? { sites: [] };
 
   analyzeOuterCapturings(path, locals);
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
   {
-    if (renderSites.some((site) => site.type === "expr")) {
+    if (renderAnalysis.sites.some((site) => site.type === "expr")) {
       throw new AnalysisError(`do not use this.render`);
     }
-    const init = renderSites.find((site) => site.init);
+    const init = renderAnalysis.sites.find((site) => site.init);
     if (init) {
       if (init.path.isClassMethod()) {
         renderPath = init.path;
@@ -84,7 +84,7 @@ export function analyzeClass(
   if (!renderPath) {
     throw new AnalysisError(`Missing render method`);
   }
-  const props = analyzeProps(propsObjSites, defaultPropsObjSites, locals, preanalysis);
+  const props = analyzeProps(propsObjAnalysis, defaultPropsObjAnalysis, locals, preanalysis);
   for (const [name, propAnalysis] of props.props) {
     if (propAnalysis.needsAlias) {
       propAnalysis.newAliasName = locals.newLocal(

@@ -4,7 +4,7 @@ import type { Expression, MemberExpression, TSMethodSignature, TSPropertySignatu
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
-import { ClassFieldSite } from "./class_fields.js";
+import { ClassFieldAnalysis } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 import { PreAnalysisResult } from "./pre.js";
 
@@ -55,12 +55,12 @@ export type PropAlias = {
  * ```
  */
 export function analyzeProps(
-  propsObjSites: ClassFieldSite[],
-  defaultPropsObjSites: ClassFieldSite[],
+  propsObjAnalysis: ClassFieldAnalysis,
+  defaultPropsObjAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
   preanalysis: PreAnalysisResult,
 ): PropsObjAnalysis {
-  const defaultProps = analyzeDefaultProps(defaultPropsObjSites);
+  const defaultProps = analyzeDefaultProps(defaultPropsObjAnalysis);
   const newObjSites: PropsObjSite[] = [];
   const props = new Map<string, PropAnalysis>();
   const getProp = (name: string) => getOr(props, name, () => ({
@@ -69,7 +69,7 @@ export function analyzeProps(
     needsAlias: false,
   }));
 
-  for (const site of propsObjSites) {
+  for (const site of propsObjAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.props`);
     }
@@ -114,16 +114,16 @@ export function analyzeProps(
 }
 
 function analyzeDefaultProps(
-  defaultPropsSites: ClassFieldSite[],
+  defaultPropsAnalysis: ClassFieldAnalysis,
 ): Map<string, NodePath<Expression>> | undefined {
-  for (const site of defaultPropsSites) {
+  for (const site of defaultPropsAnalysis.sites) {
     if (!site.init) {
       throw new AnalysisError(`Invalid use of static defaultState`);
     }
   }
 
   const defaultPropsFields = new Map<string, NodePath<Expression>>();
-  const init = defaultPropsSites.find((site) => site.init);
+  const init = defaultPropsAnalysis.sites.find((site) => site.init);
   if (!init) {
     return;
   }

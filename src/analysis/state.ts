@@ -4,7 +4,7 @@ import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { PreAnalysisResult } from "./pre.js";
 import type { LocalManager } from "./local.js";
-import type { ClassFieldSite } from "./class_fields.js";
+import type { ClassFieldAnalysis } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 
 export type StateObjAnalysis = Map<string, StateAnalysis>;
@@ -44,8 +44,8 @@ export type StateTypeAnnotation = {
 };
 
 export function analyzeState(
-  stateObjSites: ClassFieldSite[],
-  setStateSites: ClassFieldSite[],
+  stateObjAnalysis: ClassFieldAnalysis,
+  setStateAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
   preanalysis: PreAnalysisResult,
 ): StateObjAnalysis {
@@ -54,7 +54,7 @@ export function analyzeState(
     sites: [],
   }));
 
-  const init = stateObjSites.find((site) => site.init);
+  const init = stateObjAnalysis.sites.find((site) => site.init);
   if (init) {
     const init_ = init.init!;
     if (init_.type !== "init_value") {
@@ -84,7 +84,7 @@ export function analyzeState(
       });
     }
   }
-  for (const site of stateObjSites) {
+  for (const site of stateObjAnalysis.sites) {
     if (site.init) {
       continue;
     }
@@ -115,7 +115,7 @@ export function analyzeState(
       throw new AnalysisError(`Non-analyzable this.state`);
     }
   }
-  for (const site of setStateSites) {
+  for (const site of setStateAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.setState`);
     }
