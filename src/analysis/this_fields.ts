@@ -1,29 +1,72 @@
+// This file contains analysis for class fields (`this.foo` and `C.foo`) where `C` is the class,
+// regardless of whether this is a special one (`this.props`) or a user-defined one (`this.foo`).
+//
+// Both the declarations and the usages are collected.
+
 import type { NodePath } from "@babel/core";
 import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod, TSType } from "@babel/types";
 import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 
+/**
+ * Aggregated result of class field analysis.
+ */
 export type ThisFields = {
+  /** Access to instance fields (`this.foo`), indexed by their names. */
   thisFields: Map<string, ThisFieldSite[]>;
+  /** Access to static fields (`C.foo`, where `C` is the class), indexed by their names. */
   staticFields: Map<string, StaticFieldSite[]>;
 };
 
+/**
+ * A place where the instance field is declared or used.
+ */
 export type ThisFieldSite = {
   type: "class_field";
+  /**
+   * Declaration. One of:
+   *
+   * - Class element (methods, fields, etc.)
+   * - Assignment to `this` in the constructor
+   */
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
+  /**
+   * Type annotation, if any.
+   *
+   * Param/return annotations attached to function-like implementations are ignored.
+   */
   typing: FieldTyping | undefined;
+  /**
+   * Initializing expression, if any.
+   */
   init: FieldInit | undefined;
   hasWrite: undefined;
+  /**
+   * true if the initializer has a side effect.
+   */
   hasSideEffect: boolean;
 } | {
   type: "expr";
+  /**
+   * The node that accesses the field (both read and write)
+   */
   path: NodePath<MemberExpression>;
   typing: undefined;
   init: undefined;
+  /**
+   * true if it involves writing. This includes:
+   *
+   * - Assignment `this.foo = 42`
+   * - Compound assignment `this.foo += 42`
+   * - Delete `delete this.foo`
+   */
   hasWrite: boolean;
   hasSideEffect: undefined;
 };
 
+/**
+ * Essentially a TSTypeAnnotation, but accounts for TSDeclareMethod as well.
+ */
 export type FieldTyping = {
   type: "type_value";
   valueTypePath: NodePath<TSType>;
@@ -32,6 +75,9 @@ export type FieldTyping = {
   methodDeclPath: NodePath<TSDeclareMethod>;
 }
 
+/**
+ * Essentially an Expression, but accounts for ClassMethod as well.
+ */
 export type FieldInit = {
   type: "init_value";
   valuePath: NodePath<Expression>
@@ -40,15 +86,41 @@ export type FieldInit = {
   methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
 };
 
+/**
+ * A place where the static field is declared or used.
+ */
 export type StaticFieldSite = {
   type: "class_field";
+  /**
+   * Declaration. One of:
+   *
+   * - Class element (methods, fields, etc.)
+   * - Assignment to `this` in a static initialization block
+   */
   path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
+  /**
+   * Type annotation, if any.
+   *
+   * Param/return annotations attached to function-like implementations are ignored.
+   */
   typing: FieldTyping | undefined;
+  /**
+   * Initializing expression, if any.
+   */
   init: FieldInit | undefined;
   hasWrite: undefined;
+  /**
+   * true if the initializer has a side effect.
+   */
   hasSideEffect: boolean;
 };
 
+/**
+ * Collect declarations and uses of the following:
+ *
+ * - Instance fields ... `this.foo`
+ * - Static fields ... `C.foo`, where `C` is the class
+ */
 export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields {
   const thisFields = new Map<string, ThisFieldSite[]>();
   const getThisField = (name: string) => getOr(thisFields, name, () => []);
@@ -59,6 +131,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
     if (isNamedClassElement(itemPath)) {
+      // The element is a class method or a class field (in a general sense)
       const isStatic = itemPath.node.static;
       const name = memberName(itemPath.node);
       if (name == null) {
@@ -66,6 +139,9 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       }
       const field = isStatic ? getStaticField(name) : getThisField(name);
       if (isClassPropertyLike(itemPath)) {
+        // Class field.
+        // - May have an initializer: `foo = 42;` or not: `foo;`
+        // - May have a type annotation: `foo: number;` or not: `foo;`
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         const typeAnnotation = itemPath.get("typeAnnotation");
         const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation() ? typeAnnotation : undefined;
@@ -83,14 +159,19 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
           hasSideEffect: !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
         });
         if (valuePath) {
+          // Initializer should be analyzed in step 2 too (considered to be in the constructor)
           bodies.push(valuePath);
         }
       } else if (isClassMethodOrDecl(itemPath)) {
+        // Class method, constructor, getter/setter, or an accessor (those that will be introduced in the decorator proposal).
+        //
+        // - In TS, it may lack the implementation (i.e. TSDeclareMethod)
         const kind = itemPath.node.kind ?? "method";
         if (kind === "method") {
           field.push({
             type: "class_field",
             path: itemPath,
+            // We put `typing` here only when it is type-only
             typing: itemPath.isTSDeclareMethod()
               ? {
                 type: "type_method",
@@ -103,6 +184,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
             hasWrite: undefined,
             hasSideEffect: false,
           });
+          // Analysis for step 2
           if (isClassMethodLike(itemPath)) {
             for (const paramPath of itemPath.get("params")) {
                bodies.push(paramPath);
@@ -133,6 +215,8 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
 
   // 1st pass additional work: field initialization in constructor
   if (constructor) {
+    // Only `constructor(props)` is allowed.
+    // TODO: accept context as well
     if (constructor.node.params.length > 1) {
       throw new AnalysisError(`Constructor has too many parameters`);
     } else if (constructor.node.params.length < 1) {
@@ -146,6 +230,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     const stmts = constructor.get("body").get("body");
 
     // Check super() call
+    // Must be super(props) or super(props, context)
     const superCallIndex = stmts.findIndex((stmt) =>
       stmt.node.type === "ExpressionStatement"
       && stmt.node.expression.type === "CallExpression"
@@ -169,6 +254,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
       throw new AnalysisError(`Invalid argument for super()`);
     }
 
+    // Analyze init statements (must be in the form of `this.foo = expr;`)
     const initStmts = stmts.slice(superCallIndex + 1);
     for (const stmt of initStmts) {
       if (!(
@@ -247,6 +333,7 @@ export function analyzeThisFields(path: NodePath<ClassDeclaration>): ThisFields 
     traverseItem(body);
   }
 
+  // Post validation
   for (const [name, fieldSites] of thisFields) {
     if (fieldSites.length === 0) {
       thisFields.delete(name);
@@ -312,7 +399,7 @@ function estimateSideEffect(expr: Expression): boolean {
     case "MemberExpression":
       // Assume `foo.bar` to be pure
       return estimateSideEffect(expr.object) || (expr.property.type !== "PrivateName" && estimateSideEffect(expr.property));
-    
+
     case "UnaryExpression":
       switch (expr.operator) {
         case "void":

@@ -1,3 +1,5 @@
+// This file contains analysis paths for class heads.
+
 import type { NodePath } from "@babel/core";
 import type { BlockStatement, ClassDeclaration, Identifier, Program, TSInterfaceBody, TSMethodSignature, TSPropertySignature, TSType, TSTypeParameterDeclaration } from "@babel/types";
 import { memberName, nonNullPath } from "../utils.js";
