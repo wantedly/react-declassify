@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.8
+
 - Added
   - Implement MVP for componentDidMount/componentDidUpdate/componentWillUnmount
 - Fixed
