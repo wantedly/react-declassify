@@ -339,6 +339,158 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       ))
     }
   }
+
+  if (analysis.effects.cdmPath || analysis.effects.cduPath || analysis.effects.cwuPath) {
+    // Emit "raw effects"
+
+    // Emit `const isMounted = useRef(false);`
+    preamble.push(t.variableDeclaration(
+      "const",
+      [t.variableDeclarator(
+        t.identifier(analysis.effects.isMountedLocalName!),
+        t.callExpression(
+          getReactImport("useRef", babel, analysis.superClassRef),
+          [t.booleanLiteral(false)]
+        )
+      )]
+    ));
+
+    // Emit first `useEffect` for componentDidMount/componentDidUpdate
+    // It also updates `isMounted` -- needed for componentWillUnmount as well!
+    preamble.push(
+      t.addComment(
+        t.expressionStatement(
+          t.callExpression(
+            getReactImport("useEffect", babel, analysis.superClassRef),
+            [t.arrowFunctionExpression([], t.blockStatement([
+              t.ifStatement(
+                // Condition: `!isMountedLocalName.current`
+                t.unaryExpression("!",
+                  t.memberExpression(
+                    t.identifier(analysis.effects.isMountedLocalName!),
+                    t.identifier("current"),
+                  )
+                ),
+                // Consequent: `{ isMountedLocalName.current = true; ... }`
+                t.blockStatement([
+                  t.expressionStatement(
+                    t.assignmentExpression(
+                      "=",
+                      t.memberExpression(
+                        t.identifier(analysis.effects.isMountedLocalName!),
+                        t.identifier("current"),
+                      ),
+                      t.booleanLiteral(true)
+                    )
+                  ),
+                  ...(analysis.effects.cdmPath?.node.body.body ?? [])
+                ]),
+                // Alternate: contents of componentDidUpdate, if any
+                analysis.effects.cduPath?.node.body
+              )
+            ]))]
+          )
+        ),
+        "leading",
+        " TODO(react-declassify): refactor this effect (automatically generated from lifecycle)",
+        true
+      )
+    );
+    refreshComments(preamble[preamble.length - 1]!);
+
+    if (analysis.effects.cwuPath) {
+      // To workaround dependency issues, store the latest callback in a ref
+
+      // Emit `const cleanup = useRef(null);`
+      preamble.push(t.variableDeclaration(
+        "const",
+        [t.variableDeclarator(
+          t.identifier(analysis.effects.cleanupLocalName!),
+          assignTypeArguments(
+            t.callExpression(
+              getReactImport("useRef", babel, analysis.superClassRef),
+              [t.nullLiteral()]
+            ),
+            // Type annotation: useRef<(() => void) | null>
+            ts
+            ? t.tsTypeParameterInstantiation([
+                t.tsUnionType([
+                  t.tsFunctionType(null, [], t.tsTypeAnnotation(t.tsVoidKeyword())),
+                  t.tsNullKeyword()
+                ])
+              ])
+            : null
+          )
+        )]
+      ));
+
+      // Emit `cleanup.current = () => { ... }`
+      preamble.push(t.expressionStatement(t.assignmentExpression(
+        "=",
+        t.memberExpression(
+          t.identifier(analysis.effects.cleanupLocalName!),
+          t.identifier("current")
+        ),
+        t.arrowFunctionExpression([], analysis.effects.cwuPath.node.body)
+      )));
+
+      // Emit the second `useEffect` -- this time with empty dependency array
+      preamble.push(
+        t.addComment(
+          t.expressionStatement(
+            t.callExpression(
+              getReactImport("useEffect", babel, analysis.superClassRef),
+              [
+                t.arrowFunctionExpression([], t.blockStatement([
+                  // Immediately return the cleanup function
+                  t.returnStatement(t.arrowFunctionExpression([], t.blockStatement([
+                    // Check isMounted
+                    t.ifStatement(
+                      // `if (isMounted.current)`
+                      t.memberExpression(
+                        t.identifier(analysis.effects.isMountedLocalName!),
+                        t.identifier("current")
+                      ),
+                      t.blockStatement([
+                        // `isMounted.current = false;`
+                        t.expressionStatement(
+                          t.assignmentExpression(
+                            "=",
+                            t.memberExpression(
+                              t.identifier(analysis.effects.isMountedLocalName!),
+                              t.identifier("current")
+                            ),
+                            t.booleanLiteral(false)
+                          )
+                        ),
+                        // `cleanup.current?.()`
+                        t.expressionStatement(
+                          t.optionalCallExpression(
+                            t.memberExpression(
+                              t.identifier(analysis.effects.cleanupLocalName!),
+                              t.identifier("current")
+                            ),
+                            [],
+                            true
+                          )
+                        )
+                      ])
+                    )
+                  ])))
+                ])),
+                t.arrayExpression([]),
+              ]
+            )
+          ),
+          "leading",
+          " TODO(react-declassify): refactor this effect (automatically generated from lifecycle)",
+          true
+        )
+      );
+      refreshComments(preamble[preamble.length - 1]!);
+    }
+  }
+
   const bodyNode = analysis.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
   // recast is not smart enough to correctly pretty-print type parameters for arrow functions.

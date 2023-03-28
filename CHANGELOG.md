@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added
+  - Implement MVP for componentDidMount/componentDidUpdate/componentWillUnmount
 - Fixed
   - Don't fail if user-defined class field (e.g. `this.foo`) is assigned without initializing.
 

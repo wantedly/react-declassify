@@ -256,7 +256,9 @@ If you need to enforce specific styles, use Prettier or ESLint or whatever is yo
   - [ ] Transform legacy string refs as far as possible
 - [ ] Support for lifecycles
   - [ ] Transform componentDidMount, componentDidUpdate, and componentWillUnmount
-  - [ ]
+    - [x] Support "raw" effects -- simply mapping the three callbacks to guarded effects.
+    - [ ] Support re-pairing effects
+  - [ ] Transform shouldComponentUpdate
 - [ ] Support for receiving refs
   - [ ] Use `forwardRef` + `useImperativeHandle` when requested by the user
 - [ ] Support for contexts

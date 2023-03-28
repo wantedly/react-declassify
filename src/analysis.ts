@@ -10,6 +10,7 @@ import { LocalManager, RemovableNode } from "./analysis/local.js";
 import { analyzeUserDefined, postAnalyzeCallbackDependencies, UserDefinedAnalysis } from "./analysis/user_defined.js";
 import type { PreAnalysisResult } from "./analysis/pre.js";
 import type { LibRef } from "./analysis/lib.js";
+import { EffectAnalysis, analyzeEffects } from "./analysis/effect.js";
 
 export { AnalysisError } from "./analysis/error.js";
 
@@ -43,6 +44,7 @@ export type AnalysisResult = {
   state: StateObjAnalysis;
   props: PropsObjAnalysis;
   userDefined: UserDefinedAnalysis;
+  effects: EffectAnalysis;
 };
 
 export function analyzeClass(
@@ -58,6 +60,10 @@ export function analyzeClass(
   const stateObjAnalysis = getAndDelete(sites, "state") ?? { sites: [] };
   const setStateAnalysis = getAndDelete(sites, "setState") ?? { sites: [] };
   const states = analyzeState(stateObjAnalysis, setStateAnalysis, locals, preanalysis);
+
+  const componentDidMount = getAndDelete(sites, "componentDidMount") ?? { sites: [] };
+  const componentDidUpdate = getAndDelete(sites, "componentDidUpdate") ?? { sites: [] };
+  const componentWillUnmount = getAndDelete(sites, "componentWillUnmount") ?? { sites: [] };
 
   const renderAnalysis = getAndDelete(sites, "render") ?? { sites: [] };
 
@@ -102,6 +108,13 @@ export function analyzeClass(
     }
   }
 
+  const effects = analyzeEffects(
+    componentDidMount,
+    componentDidUpdate,
+    componentWillUnmount,
+    userDefined,
+  );
+
   const render = analyzeRender(renderPath, locals);
 
   for (const [name, stateAnalysis] of states.entries()) {
@@ -112,6 +125,13 @@ export function analyzeClass(
 
   for (const [name, field] of userDefined.fields) {
     field.localName = locals.newLocal(name, field.sites.map((site) => site.path));
+  }
+
+  if (effects.cdmPath || effects.cduPath || effects.cwuPath) {
+    effects.isMountedLocalName = locals.newLocal("isMounted", []);
+    if (effects.cwuPath) {
+      effects.cleanupLocalName = locals.newLocal("cleanup", []);
+    }
   }
 
   return {
@@ -125,6 +145,7 @@ export function analyzeClass(
     state: states,
     props,
     userDefined,
+    effects,
   };
 }
 

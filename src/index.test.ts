@@ -1158,6 +1158,61 @@ describe("react-declassify", () => {
     });
   });
 
+  describe("Effects", () => {
+    it("transforms raw effects", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          componentDidMount() {
+            console.log("mounted");
+          }
+          componentDidUpdate() {
+            console.log("updated");
+          }
+          componentWillUnmount() {
+            console.log("unmounting");
+          }
+          render() {
+            return null;
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const isMounted = React.useRef(false);
+
+          // TODO(react-declassify): refactor this effect (automatically generated from lifecycle)
+          React.useEffect(() => {
+            if (!isMounted.current) {
+              isMounted.current = true;
+              console.log("mounted");
+            } else {
+              console.log("updated");
+            }
+          });
+
+          const cleanup = React.useRef(null);
+
+          cleanup.current = () => {
+            console.log("unmounting");
+          };
+
+          // TODO(react-declassify): refactor this effect (automatically generated from lifecycle)
+          React.useEffect(() => {
+            return () => {
+              if (isMounted.current) {
+                isMounted.current = false;
+                cleanup.current?.();
+              }
+            };
+          }, []);
+
+          return null;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+  });
+
   test("readme example 1", () => {
     const input = dedent`\
       import React from "react";
