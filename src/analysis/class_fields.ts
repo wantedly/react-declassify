@@ -16,6 +16,8 @@ export type ClassFieldsAnalysis = {
   instanceFields: Map<string, ClassFieldAnalysis>;
   /** Access to static fields (`C.foo`, where `C` is the class), indexed by their names. */
   staticFields: Map<string, ClassFieldAnalysis>;
+  /** Appearances of `this` as in `this.foo.bind(this)` */
+  bindThisSites: BindThisSite[];
 };
 
 /**
@@ -103,6 +105,24 @@ export type FieldInit = {
 } | {
   type: "init_method";
   methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
+};
+
+/**
+ * Appearance of `this` as in `this.foo.bind(this)`
+ */
+export type BindThisSite = {
+  /**
+   * true if the bind call has more arguments e.g. `this.foo.bind(this, 42)`
+   */
+  bindsMore: boolean;
+  /** `this` as in the argument to `Function.prototype.bind` */
+  thisArgPath: NodePath<ThisExpression>;
+  /** The whole bind expression */
+  binderPath: NodePath<CallExpression>;
+  /** The member expression that `this` is being bound to e.g. `this.foo` */
+  bindeePath: NodePath<MemberExpression>;
+  /** true if this is part of self-binding: `this.foo = this.foo.bind(this);` */
+  isSelfBindingInitialization: boolean;
 };
 
 /**
@@ -301,6 +321,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   }
 
   // 2nd pass: look for uses within items
+  const bindThisSites: BindThisSite[] = [];
   function traverseItem(owner: string | undefined, path: NodePath) {
     traverseThis(path, (thisPath) => {
       // Ensure this is part of `this.foo`
@@ -308,6 +329,25 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
       if (!thisMemberPath.isMemberExpression({
         object: thisPath.node
       })) {
+        // Check for bind arguments: `this.foo.bind(this)`
+        if (
+          thisMemberPath.isCallExpression()
+          && thisMemberPath.node.arguments[0] === thisPath.node
+          && thisMemberPath.node.callee.type === "MemberExpression"
+          && memberRefName(thisMemberPath.node.callee) === "bind"
+          && thisMemberPath.node.callee.object.type === "MemberExpression"
+          && thisMemberPath.node.callee.object.object.type === "ThisExpression"
+        ) {
+          bindThisSites.push({
+            bindsMore: thisMemberPath.node.arguments.length > 1,
+            thisArgPath: thisPath,
+            binderPath: thisMemberPath,
+            bindeePath: (thisMemberPath.get("callee") as NodePath<MemberExpression>).get("object") as NodePath<MemberExpression>,
+            // Checked later
+            isSelfBindingInitialization: false,
+          });
+          return;
+        }
         throw new AnalysisError(`Stray this`);
       }
 
@@ -345,6 +385,41 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     traverseItem(body.owner, body.path);
   }
 
+  // Special handling for self-binding initialization (`this.foo = this.foo.bind(this)`)
+  for (const [name, field] of instanceFields) {
+    field.sites = field.sites.filter((site) => {
+      if (
+        site.type === "decl"
+        && site.init?.type === "init_value"
+      ) {
+        const valuePath = site.init.valuePath;
+        const bindThisSite = bindThisSites.find((binder) => binder.binderPath === valuePath)
+        if (
+          bindThisSite
+          && !bindThisSite.bindsMore
+          && memberRefName(bindThisSite.bindeePath.node) === name
+        ) {
+          bindThisSite.isSelfBindingInitialization = true;
+          // Skip the self-binding initialization (lhs)
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+  for (const [, field] of instanceFields) {
+    field.sites = field.sites.filter((site) => {
+      if (site.type === "expr") {
+        const bindThisSite = bindThisSites.find((binder) => binder.bindeePath === site.path)
+        if (bindThisSite?.isSelfBindingInitialization) {
+          // Skip the self-binding initialization (rhs)
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
   // Post validation
   for (const [name, field] of instanceFields) {
     if (field.sites.length === 0) {
@@ -373,7 +448,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     }
   }
 
-  return { instanceFields, staticFields };
+  return { instanceFields, staticFields, bindThisSites };
 }
 
 function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {

@@ -2,7 +2,7 @@ import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type { ClassDeclaration, ClassMethod, Identifier, JSXIdentifier, TSType, TSTypeParameterDeclaration } from "@babel/types";
 import { AnalysisError } from "./analysis/error.js";
-import { analyzeClassFields } from "./analysis/class_fields.js";
+import { BindThisSite, analyzeClassFields } from "./analysis/class_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete } from "./utils.js";
 import { analyzeProps, needAlias, PropsObjAnalysis } from "./analysis/prop.js";
@@ -45,6 +45,7 @@ export type AnalysisResult = {
   props: PropsObjAnalysis;
   userDefined: UserDefinedAnalysis;
   effects: EffectAnalysis;
+  bindThisSites: BindThisSite[];
 };
 
 export function analyzeClass(
@@ -52,7 +53,7 @@ export function analyzeClass(
   preanalysis: PreAnalysisResult
 ): AnalysisResult {
   const locals = new LocalManager(path);
-  const { instanceFields: sites, staticFields } = analyzeClassFields(path);
+  const { instanceFields: sites, staticFields, bindThisSites } = analyzeClassFields(path);
 
   const propsObjAnalysis = getAndDelete(sites, "props") ?? { sites: [] };
   const defaultPropsObjAnalysis = getAndDelete(staticFields, "defaultProps") ?? { sites: [] };
@@ -146,6 +147,7 @@ export function analyzeClass(
     props,
     userDefined,
     effects,
+    bindThisSites,
   };
 }
 

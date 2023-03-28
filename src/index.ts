@@ -180,6 +180,13 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       }
     }
   }
+  for (const bindThisSite of analysis.bindThisSites) {
+    if (bindThisSite.bindsMore) {
+      bindThisSite.thisArgPath.replaceWith(t.nullLiteral());
+    } else {
+      bindThisSite.binderPath.replaceWith(bindThisSite.bindeePath.node);
+    }
+  }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
   const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) => needAlias(prop));

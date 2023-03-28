@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Added
+  - Support for method-binding patterns e.g. `this.foo = this.foo.bind(this);`
+
 ## 0.1.8
 
 - Added

@@ -242,8 +242,8 @@ If you need to enforce specific styles, use Prettier or ESLint or whatever is yo
   - [x] Use `useCallback` if deemed necessary
   - [x] Auto-expand direct callback call (like `this.props.onClick()`) to indirect call
   - [x] Rename methods if necessary
-  - [ ] Skip method-binding expressions (e.g. `onClick={this.onClick.bind(this)}`)
-  - [ ] Skip method-binding statements (e.g. `this.onClick = this.onClick.bind(this)`)
+  - [x] Skip method-binding expressions (e.g. `onClick={this.onClick.bind(this)}`)
+  - [x] Skip method-binding statements (e.g. `this.onClick = this.onClick.bind(this)`)
 - [ ] Support for `this.state`
   - [x] Decompose `this.state` into `useState` variables
   - [x] Rename states if necessary

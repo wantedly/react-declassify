@@ -760,6 +760,53 @@ describe("react-declassify", () => {
       `;
       expect(transform(input)).toBe(output);
     });
+
+    it("transforms binding initialization", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          constructor(props) {
+            super(props);
+            this.foo = this.foo.bind(this);
+          }
+
+          render() {
+            return (
+              <Component2
+                foo={this.foo}
+                bar={this.bar.bind(this)}
+              />
+            );
+          }
+
+          foo() {
+            console.log("foo");
+          }
+
+          bar() {
+            console.log("bar");
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const foo = React.useCallback(function foo() {
+            console.log("foo");
+          }, []);
+
+          const bar = React.useCallback(function bar() {
+            console.log("bar");
+          }, []);
+
+          return (
+            <Component2
+              foo={foo}
+              bar={bar}
+            />
+          );
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   describe("State transformation", () => {
