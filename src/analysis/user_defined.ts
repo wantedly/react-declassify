@@ -347,7 +347,7 @@ export function postAnalyzeCallbackDependencies(
       type: "dep_props_obj",
     });
   }
-  for (const [name, state] of states) {
+  for (const [name, state] of states.states) {
     for (const site of state.sites) {
       if (site.type !== "expr") {
         continue;

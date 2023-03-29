@@ -142,7 +142,7 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       }
     }
   }
-  for (const [name, stateAnalysis] of analysis.state) {
+  for (const [name, stateAnalysis] of analysis.state.states) {
     for (const site of stateAnalysis.sites) {
       if (site.type === "expr") {
         // this.state.foo -> foo
@@ -212,7 +212,7 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       ),
     ]));
   }
-  for (const field of analysis.state.values()) {
+  for (const field of analysis.state.states.values()) {
     // State declarations
     const call = t.callExpression(
       getReactImport("useState", babel, analysis.superClassRef),
@@ -265,7 +265,7 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
               break;
             }
             case "dep_state": {
-              const state = analysis.state.get(dep.name)!;
+              const state = analysis.state.states.get(dep.name)!;
               depVars.add(state.localName!);
               break;
             }

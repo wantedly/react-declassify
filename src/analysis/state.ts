@@ -7,7 +7,9 @@ import type { LocalManager } from "./local.js";
 import type { ClassFieldAnalysis } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 
-export type StateObjAnalysis = Map<string, StateAnalysis>;
+export type StateObjAnalysis = {
+  states: Map<string, StateAnalysis>;
+};
 
 export type StateAnalysis = {
   localName?: string | undefined;
@@ -183,5 +185,5 @@ export function analyzeState(
     }
     state.init = state.sites.find((site): site is StateInitSite => site.type === "state_init");
   }
-  return states;
+  return { states };
 }

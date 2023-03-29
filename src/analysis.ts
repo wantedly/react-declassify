@@ -118,7 +118,7 @@ export function analyzeClass(
 
   const render = analyzeRender(renderPath, locals);
 
-  for (const [name, stateAnalysis] of states.entries()) {
+  for (const [name, stateAnalysis] of states.states.entries()) {
     const bindingPaths = stateAnalysis.sites.map((site) => site.path);
     stateAnalysis.localName = locals.newLocal(name, bindingPaths);
     stateAnalysis.localSetterName = locals.newLocal(`set${name.replace(/^[a-z]/, (s) => s.toUpperCase())}`, bindingPaths);
