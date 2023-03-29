@@ -9,6 +9,7 @@ import { trackMember } from "./track_member.js";
 
 export type StateObjAnalysis = {
   states: Map<string, StateAnalysis>;
+  setStateSites: SetStateSite[];
 };
 
 export type StateAnalysis = {
@@ -19,7 +20,7 @@ export type StateAnalysis = {
   sites: StateSite[];
 };
 
-export type StateSite = StateInitSite | StateExprSite | SetStateSite;
+export type StateSite = StateInitSite | StateExprSite;
 
 export type StateInitSite = {
   type: "state_init";
@@ -31,9 +32,14 @@ export type StateExprSite = {
   path: NodePath<Expression>;
   owner: string | undefined;
 };
+
 export type SetStateSite = {
-  type: "setState";
   path: NodePath<CallExpression>;
+  fields: SetStateFieldSite[];
+}
+
+export type SetStateFieldSite = {
+  name: string;
   valuePath: NodePath<Expression>;
 }
 
@@ -120,6 +126,7 @@ export function analyzeState(
       throw new AnalysisError(`Non-analyzable this.state`);
     }
   }
+  const setStateSites: SetStateSite[] = [];
   for (const site of setStateAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
       throw new AnalysisError(`Invalid use of this.setState`);
@@ -135,22 +142,25 @@ export function analyzeState(
     const arg0 = args[0]!;
     if (arg0.isObjectExpression()) {
       const props = arg0.get("properties");
-      if (props.length !== 1) {
-        throw new AnalysisError(`Multiple assignments in setState is not yet supported`);
+      const fields: SetStateFieldSite[] = [];
+      for (const prop of props) {
+        if (!prop.isObjectProperty()) {
+          throw new AnalysisError(`Non-analyzable setState`);
+        }
+        const setStateName = memberName(prop.node);
+        if (setStateName == null) {
+          throw new AnalysisError(`Non-analyzable setState name`);
+        }
+        // Ensure the state exists
+        getState(setStateName);
+        fields.push({
+          name: setStateName,
+          valuePath: prop.get("value") as NodePath<Expression>,
+        });
       }
-      const prop0 = props[0]!;
-      if (!prop0.isObjectProperty()) {
-        throw new AnalysisError(`Non-analyzable setState`);
-      }
-      const setStateName = memberName(prop0.node);
-      if (setStateName == null) {
-        throw new AnalysisError(`Non-analyzable setState name`);
-      }
-      const state = getState(setStateName);
-      state.sites.push({
-        type: "setState",
+      setStateSites.push({
         path: gpPath,
-        valuePath: prop0.get("value") as NodePath<Expression>,
+        fields,
       });
     } else {
       throw new AnalysisError(`Non-analyzable setState`);
@@ -185,5 +195,5 @@ export function analyzeState(
     }
     state.init = state.sites.find((site): site is StateInitSite => site.type === "state_init");
   }
-  return { states };
+  return { states, setStateSites };
 }

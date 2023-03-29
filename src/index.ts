@@ -1,7 +1,7 @@
 import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
 import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
-import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef, needAlias } from "./analysis.js";
+import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef, needAlias, SetStateFieldSite } from "./analysis.js";
 
 type Options = {};
 
@@ -147,15 +147,30 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       if (site.type === "expr") {
         // this.state.foo -> foo
         site.path.replaceWith(t.identifier(stateAnalysis.localName!));
-      } else if (site.type === "setState") {
-        // this.setState({ foo: 1 }) -> setFoo(1)
-        site.path.replaceWith(
-          t.callExpression(
-            t.identifier(stateAnalysis.localSetterName!),
-            [site.valuePath.node]
-          )
-        );
       }
+    }
+  }
+  for (const site of analysis.state.setStateSites) {
+    function setter(field: SetStateFieldSite) {
+      // this.setState({ foo: 1 }) -> setFoo(1)
+      return t.callExpression(
+        t.identifier(analysis.state.states.get(field.name)!.localSetterName!),
+        [field.valuePath.node]
+      );
+    }
+    if (site.fields.length === 1) {
+      const field = site.fields[0]!;
+      site.path.replaceWith(setter(field));
+    } else if (site.path.parentPath.isExpressionStatement()) {
+      site.path.parentPath.replaceWithMultiple(
+        site.fields.map((field) =>
+          t.expressionStatement(setter(field))
+        )
+      );
+    } else if (site.fields.length === 0) {
+      site.path.replaceWith(t.nullLiteral());
+    } else {
+      site.path.replaceWith(t.sequenceExpression(site.fields.map(setter)));
     }
   }
   for (const [, field] of analysis.userDefined.fields) {

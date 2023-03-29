@@ -20,7 +20,7 @@ export type {
 } from "./analysis/pre.js";
 export { preanalyzeClass } from "./analysis/pre.js";
 export type { LocalManager } from "./analysis/local.js";
-export type { StateObjAnalysis } from "./analysis/state.js";
+export type { StateObjAnalysis, SetStateSite, SetStateFieldSite } from "./analysis/state.js";
 export { needAlias } from "./analysis/prop.js";
 export type { PropsObjAnalysis } from "./analysis/prop.js";
 

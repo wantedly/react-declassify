@@ -247,7 +247,7 @@ If you need to enforce specific styles, use Prettier or ESLint or whatever is yo
 - [ ] Support for `this.state`
   - [x] Decompose `this.state` into `useState` variables
   - [x] Rename states if necessary
-  - [ ] Support updating multiple states at once
+  - [x] Support updating multiple states at once
   - [ ] Support functional updates
   - [ ] Support lazy initialization
 - [ ] Support for refs

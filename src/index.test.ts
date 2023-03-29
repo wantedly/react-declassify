@@ -832,6 +832,36 @@ describe("react-declassify", () => {
       expect(transform(input)).toBe(output);
     });
 
+    it("transforms multi-value assignments", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          render() {
+            return <button onClick={() => this.setState({ foo: 3, bar: 4 })} />
+          }
+          frob() {
+            this.setState({
+              foo: 1,
+              bar: 2,
+            });
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          const [foo, setFoo] = React.useState();
+          const [bar, setBar] = React.useState();
+
+          function frob() {
+            setFoo(1);
+            setBar(2);
+          }
+
+          return <button onClick={() => (setFoo(3), setBar(4))} />;
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
     it("transforms state types (type alias)", () => {
       const input = dedent`\
         type Props = {};
