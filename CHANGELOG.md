@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.1.9
+
 - Added
   - Support for method-binding patterns e.g. `this.foo = this.foo.bind(this);`
   - Support for multiple states in one `setState()` call
