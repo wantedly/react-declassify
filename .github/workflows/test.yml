@@ -23,7 +23,7 @@ jobs:
       run: yarn test
     - name: Typecheck
       run: yarn tsc
-    # - name: Lint
-    #   run: yarn lint --max-warnings 0
+    - name: Lint
+      run: yarn lint --max-warnings 0
     - name: Check formatting
       run: yarn fmt:check

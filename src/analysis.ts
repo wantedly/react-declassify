@@ -225,7 +225,6 @@ function analyzeOuterCapturings(
 ): Set<string> {
   const capturings = new Set<string>();
   function visitIdent(path: NodePath<Identifier | JSXIdentifier>) {
-    path.getOuterBindingIdentifiers;
     const binding = path.scope.getBinding(path.node.name);
     if (!binding || binding.path.isAncestor(classPath)) {
       capturings.add(path.node.name);

@@ -270,7 +270,7 @@ export function analyzeClassFields(
           }
           constructor = itemPath as NodePath<ClassMethod>;
         } else {
-          throw new AnalysisError(`Not implemented yet: ${kind}`);
+          throw new AnalysisError(`Not implemented yet: ${kind as string}`);
         }
       } else if (isClassAccessorProperty(itemPath)) {
         throw new AnalysisError(`Not implemented yet: class accessor property`);

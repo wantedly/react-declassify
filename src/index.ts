@@ -2,12 +2,14 @@ import type {
   ArrowFunctionExpression,
   ClassMethod,
   ClassPrivateMethod,
+  Comment,
   Expression,
   FunctionDeclaration,
   FunctionExpression,
   Identifier,
   ImportDeclaration,
   MemberExpression,
+  Node,
   ObjectMethod,
   Pattern,
   RestElement,
@@ -33,13 +35,13 @@ import {
   analyzeClass,
   preanalyzeClass,
   AnalysisResult,
-  PreAnalysisResult,
   needsProps,
   LibRef,
   needAlias,
   SetStateFieldSite,
 } from "./analysis.js";
 
+// eslint-disable-next-line @typescript-eslint/ban-types
 type Options = {};
 
 export default function plugin(
@@ -144,7 +146,7 @@ function transformClass(
         // Rename variables that props are bound to.
         // E.g. `foo` as in `const { foo } = this.props`.
         // This is to ensure we hoist them correctly.
-        alias.scope.rename(alias.localName, prop.newAliasName!);
+        alias.scope.rename(alias.localName, prop.newAliasName);
       }
     }
   }
@@ -196,15 +198,9 @@ function transformClass(
           }
         }
       }
-      if (
-        prop.typing.node.type === "TSPropertySignature" &&
-        prop.typing.node.typeAnnotation
-      ) {
-        const typeAnnot = prop.typing.node.typeAnnotation;
-      }
     }
   }
-  for (const [name, stateAnalysis] of analysis.state.states) {
+  for (const [, stateAnalysis] of analysis.state.states) {
     for (const site of stateAnalysis.sites) {
       if (site.type === "expr") {
         // this.state.foo -> foo
@@ -807,6 +803,7 @@ function functionExpressionFrom(
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function arrowFunctionExpressionFrom(
   babel: typeof import("@babel/core"),
   node: FunctionLike
@@ -847,19 +844,28 @@ function constDeclaration(
 /**
  * Refreshes recast's internal state to force generically printing comments.
  */
-function refreshComments(node: any) {
-  for (const comment of node.leadingComments ?? []) {
+function refreshComments(node: Node): void;
+function refreshComments(node: Node) {
+  type ExtNode = Node & {
+    comments: Comment[];
+    original?: Node | undefined;
+  };
+  type ExtComment = Comment & {
+    leading?: boolean | undefined;
+    trailing?: boolean | undefined;
+  };
+  for (const comment of (node.leadingComments ?? []) as ExtComment[]) {
     comment.leading ??= true;
     comment.trailing ??= false;
   }
-  for (const comment of node.trailingComments ?? []) {
+  for (const comment of (node.trailingComments ?? []) as ExtComment[]) {
     comment.leading ??= false;
     comment.trailing ??= true;
   }
-  node.comments = [
+  (node as ExtNode).comments = [
     ...(node.leadingComments ?? []),
     ...(node.innerComments ?? []),
     ...(node.trailingComments ?? []),
   ];
-  node.original = undefined;
+  (node as ExtNode).original = undefined;
 }
