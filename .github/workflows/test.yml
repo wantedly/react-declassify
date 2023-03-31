@@ -1,0 +1,29 @@
+name: build and test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+    - name: Install yarn dependencies
+      run: yarn install --immutable
+    - name: Build
+      run: yarn build
+    - name: Run tests
+      run: yarn test
+    - name: Typecheck
+      run: yarn tsc
+    # - name: Lint
+    #   run: yarn lint --max-warnings 0
+    # - name: Check formatting
+    #   run: yarn fmt:check
