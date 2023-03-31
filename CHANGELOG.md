@@ -1,5 +1,10 @@
 ## Unreleased
 
+## 0.1.10
+
+- Misc
+  - Internal housekeeping, including introduction of GitHub Actions, Prettier, and ESLint.
+
 ## 0.1.9
 
 - Added
