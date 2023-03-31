@@ -1,11 +1,50 @@
-import type { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionDeclaration, FunctionExpression, Identifier, ImportDeclaration, MemberExpression, ObjectMethod, Pattern, RestElement, Statement, TSEntityName, TSType, TSTypeAnnotation, TSTypeParameterDeclaration, VariableDeclaration } from "@babel/types";
+import type {
+  ArrowFunctionExpression,
+  ClassMethod,
+  ClassPrivateMethod,
+  Expression,
+  FunctionDeclaration,
+  FunctionExpression,
+  Identifier,
+  ImportDeclaration,
+  MemberExpression,
+  ObjectMethod,
+  Pattern,
+  RestElement,
+  Statement,
+  TSEntityName,
+  TSType,
+  TSTypeAnnotation,
+  TSTypeParameterDeclaration,
+  VariableDeclaration,
+} from "@babel/types";
 import type { NodePath, PluginObj, PluginPass } from "@babel/core";
-import { assignReturnType, assignTypeAnnotation, assignTypeArguments, assignTypeParameters, importName, isTS, nonNullPath } from "./utils.js";
-import { AnalysisError, analyzeClass, preanalyzeClass, AnalysisResult, PreAnalysisResult, needsProps, LibRef, needAlias, SetStateFieldSite } from "./analysis.js";
+import {
+  assignReturnType,
+  assignTypeAnnotation,
+  assignTypeArguments,
+  assignTypeParameters,
+  importName,
+  isTS,
+  nonNullPath,
+} from "./utils.js";
+import {
+  AnalysisError,
+  analyzeClass,
+  preanalyzeClass,
+  AnalysisResult,
+  PreAnalysisResult,
+  needsProps,
+  LibRef,
+  needAlias,
+  SetStateFieldSite,
+} from "./analysis.js";
 
 type Options = {};
 
-export default function plugin(babel: typeof import("@babel/core")): PluginObj<PluginPass & { opts: Options }> {
+export default function plugin(
+  babel: typeof import("@babel/core")
+): PluginObj<PluginPass & { opts: Options }> {
   const { types: t } = babel;
   return {
     name: "react-declassify",
@@ -20,7 +59,11 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
           const declPath = path.parentPath;
           try {
             const analysis = analyzeClass(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(analysis, { ts }, babel);
+            const { funcNode, typeNode } = transformClass(
+              analysis,
+              { ts },
+              babel
+            );
             if (path.node.id) {
               // Necessary to avoid false error regarding duplicate declaration.
               path.scope.removeBinding(path.node.id.name);
@@ -31,9 +74,7 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
                   funcNode,
                   typeNode ? t.tsTypeAnnotation(typeNode) : undefined
                 ),
-                t.exportDefaultDeclaration(
-                  t.cloneNode(path.node.id)
-                )
+                t.exportDefaultDeclaration(t.cloneNode(path.node.id)),
               ]);
             } else {
               path.replaceWith(funcNode);
@@ -42,13 +83,21 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (!(e instanceof AnalysisError)) {
               throw e;
             }
-            t.addComment(declPath.node, "leading", ` react-declassify-disable Cannot perform transformation: ${e.message} `);
+            t.addComment(
+              declPath.node,
+              "leading",
+              ` react-declassify-disable Cannot perform transformation: ${e.message} `
+            );
             refreshComments(declPath.node);
           }
         } else {
           try {
             const analysis = analyzeClass(path, preanalysis);
-            const { funcNode, typeNode } = transformClass(analysis, { ts }, babel);
+            const { funcNode, typeNode } = transformClass(
+              analysis,
+              { ts },
+              babel
+            );
             // Necessary to avoid false error regarding duplicate declaration.
             path.scope.removeBinding(path.node.id.name);
             path.replaceWith(
@@ -63,7 +112,11 @@ export default function plugin(babel: typeof import("@babel/core")): PluginObj<P
             if (!(e instanceof AnalysisError)) {
               throw e;
             }
-            t.addComment(path.node, "leading", ` react-declassify-disable Cannot perform transformation: ${e.message} `);
+            t.addComment(
+              path.node,
+              "leading",
+              ` react-declassify-disable Cannot perform transformation: ${e.message} `
+            );
             refreshComments(path.node);
           }
         }
@@ -77,7 +130,11 @@ type TransformResult = {
   typeNode?: TSType | undefined;
 };
 
-function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babel: typeof import("@babel/core")): TransformResult {
+function transformClass(
+  analysis: AnalysisResult,
+  options: { ts: boolean },
+  babel: typeof import("@babel/core")
+): TransformResult {
   const { types: t } = babel;
   const { ts } = options;
 
@@ -118,27 +175,32 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       // Make the prop optional
       prop.typing.node.optional = true;
       if (prop.typing.isTSPropertySignature()) {
-        const typeAnnotation = nonNullPath(prop.typing.get("typeAnnotation"))?.get("typeAnnotation");
+        const typeAnnotation = nonNullPath(
+          prop.typing.get("typeAnnotation")
+        )?.get("typeAnnotation");
         if (typeAnnotation) {
           if (typeAnnotation.isTSUnionType()) {
-            if (typeAnnotation.node.types.some((t) => t.type === "TSUndefinedKeyword")) {
+            if (
+              typeAnnotation.node.types.some(
+                (t) => t.type === "TSUndefinedKeyword"
+              )
+            ) {
               // No need to add undefined
             } else {
               typeAnnotation.node.types.push(t.tsUndefinedKeyword());
             }
           } else {
-            typeAnnotation.replaceWith(t.tsUnionType([
-              typeAnnotation.node,
-              t.tsUndefinedKeyword(),
-            ]))
+            typeAnnotation.replaceWith(
+              t.tsUnionType([typeAnnotation.node, t.tsUndefinedKeyword()])
+            );
           }
         }
       }
       if (
-        prop.typing.node.type === "TSPropertySignature"
-        && prop.typing.node.typeAnnotation
+        prop.typing.node.type === "TSPropertySignature" &&
+        prop.typing.node.typeAnnotation
       ) {
-        const typeAnnot = prop.typing.node.typeAnnotation
+        const typeAnnot = prop.typing.node.typeAnnotation;
       }
     }
   }
@@ -163,9 +225,7 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       site.path.replaceWith(setter(field));
     } else if (site.path.parentPath.isExpressionStatement()) {
       site.path.parentPath.replaceWithMultiple(
-        site.fields.map((field) =>
-          t.expressionStatement(setter(field))
-        )
+        site.fields.map((field) => t.expressionStatement(setter(field)))
       );
     } else if (site.fields.length === 0) {
       site.path.replaceWith(t.nullLiteral());
@@ -174,7 +234,10 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
     }
   }
   for (const [, field] of analysis.userDefined.fields) {
-    if (field.type === "user_defined_function" || field.type === "user_defined_ref") {
+    if (
+      field.type === "user_defined_function" ||
+      field.type === "user_defined_ref"
+    ) {
       for (const site of field.sites) {
         if (site.type === "expr") {
           // this.foo -> foo
@@ -204,28 +267,34 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
   }
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
-  const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) => needAlias(prop));
+  const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) =>
+    needAlias(prop)
+  );
   if (propsWithAlias.length > 0) {
     // Expand this.props into variables.
     // E.g. const { foo, bar } = props;
-    preamble.push(t.variableDeclaration("const", [
-      t.variableDeclarator(
-        t.objectPattern(propsWithAlias.map(([name, prop]) =>
-          t.objectProperty(
-            t.identifier(name),
-            prop.defaultValue
-            ? t.assignmentPattern(
-              t.identifier(prop.newAliasName!),
-              prop.defaultValue.node
+    preamble.push(
+      t.variableDeclaration("const", [
+        t.variableDeclarator(
+          t.objectPattern(
+            propsWithAlias.map(([name, prop]) =>
+              t.objectProperty(
+                t.identifier(name),
+                prop.defaultValue
+                  ? t.assignmentPattern(
+                      t.identifier(prop.newAliasName!),
+                      prop.defaultValue.node
+                    )
+                  : t.identifier(prop.newAliasName!),
+                false,
+                name === prop.newAliasName!
+              )
             )
-            : t.identifier(prop.newAliasName!),
-            false,
-            name === prop.newAliasName!,
           ),
-        )),
-        t.identifier("props"),
-      ),
-    ]));
+          t.identifier("props")
+        ),
+      ])
+    );
   }
   for (const field of analysis.state.states.values()) {
     // State declarations
@@ -233,36 +302,42 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       getReactImport("useState", babel, analysis.superClassRef),
       field.init ? [field.init.valuePath.node] : []
     );
-    preamble.push(t.variableDeclaration("const", [
-      t.variableDeclarator(
-        t.arrayPattern([
-          t.identifier(field.localName!),
-          t.identifier(field.localSetterName!),
-        ]),
-        ts && field.typeAnnotation ?
-          assignTypeArguments(
-            call,
-            t.tsTypeParameterInstantiation([
-              field.typeAnnotation.type === "method"
-              ? t.tsFunctionType(
-                  undefined,
-                  field.typeAnnotation.params.map((p) => p.node),
-                  t.tsTypeAnnotation(field.typeAnnotation.returnType.node)
-                )
-              : field.typeAnnotation.path.node
-            ])
-          )
-        : call
-      )
-    ]))
+    preamble.push(
+      t.variableDeclaration("const", [
+        t.variableDeclarator(
+          t.arrayPattern([
+            t.identifier(field.localName!),
+            t.identifier(field.localSetterName!),
+          ]),
+          ts && field.typeAnnotation
+            ? assignTypeArguments(
+                call,
+                t.tsTypeParameterInstantiation([
+                  field.typeAnnotation.type === "method"
+                    ? t.tsFunctionType(
+                        undefined,
+                        field.typeAnnotation.params.map((p) => p.node),
+                        t.tsTypeAnnotation(field.typeAnnotation.returnType.node)
+                      )
+                    : field.typeAnnotation.path.node,
+                ])
+              )
+            : call
+        ),
+      ])
+    );
   }
   for (const [, field] of analysis.userDefined.fields) {
     if (field.type === "user_defined_function") {
       // Method definitions.
       let init: Expression =
         field.init.type === "method"
-        ? functionExpressionFrom(babel, field.init.path.node, t.identifier(field.localName!))
-        : field.init.initPath.node;
+          ? functionExpressionFrom(
+              babel,
+              field.init.path.node,
+              t.identifier(field.localName!)
+            )
+          : field.init.initPath.node;
       if (field.needMemo) {
         const depVars = new Set<string>();
         const depProps = new Set<string>();
@@ -296,86 +371,88 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
           [
             init,
             t.arrayExpression([
-              ...Array.from(depVars).sort().map((name) =>
-                t.identifier(name)
-              ),
-              ...Array.from(depProps).sort().map((name) =>
-                t.memberExpression(
-                  t.identifier("props"),
-                  t.identifier(name)
+              ...Array.from(depVars)
+                .sort()
+                .map((name) => t.identifier(name)),
+              ...Array.from(depProps)
+                .sort()
+                .map((name) =>
+                  t.memberExpression(t.identifier("props"), t.identifier(name))
                 ),
-              )
             ]),
           ]
-        )
+        );
       }
-      preamble.push(constDeclaration(
-        babel,
-        t.identifier(field.localName!),
-        init,
-        field.typeAnnotation ? t.tsTypeAnnotation(field.typeAnnotation.node) : undefined
-      ));
+      preamble.push(
+        constDeclaration(
+          babel,
+          t.identifier(field.localName!),
+          init,
+          field.typeAnnotation
+            ? t.tsTypeAnnotation(field.typeAnnotation.node)
+            : undefined
+        )
+      );
     } else if (field.type === "user_defined_ref") {
       // const foo = useRef(null);
       const call = t.callExpression(
         getReactImport("useRef", babel, analysis.superClassRef),
         [t.nullLiteral()]
       );
-      preamble.push(t.variableDeclaration(
-        "const",
-        [t.variableDeclarator(
-          t.identifier(field.localName!),
-          ts && field.typeAnnotation
-            ? assignTypeArguments(
-              call,
-              t.tsTypeParameterInstantiation([
-                field.typeAnnotation.node
-              ])
-            )
-            : call
-        )]
-      ))
+      preamble.push(
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            t.identifier(field.localName!),
+            ts && field.typeAnnotation
+              ? assignTypeArguments(
+                  call,
+                  t.tsTypeParameterInstantiation([field.typeAnnotation.node])
+                )
+              : call
+          ),
+        ])
+      );
     } else if (field.type === "user_defined_direct_ref") {
       // const foo = useRef(init);
       const call = t.callExpression(
         getReactImport("useRef", babel, analysis.superClassRef),
-        [
-          field.init
-          ? field.init.node
-          : t.identifier("undefined")
-        ]
+        [field.init ? field.init.node : t.identifier("undefined")]
       );
-      preamble.push(t.variableDeclaration(
-        "const",
-        [t.variableDeclarator(
-          t.identifier(field.localName!),
-          ts && field.typeAnnotation
-            ? assignTypeArguments(
-              call,
-              t.tsTypeParameterInstantiation([
-                field.typeAnnotation.node
-              ])
-            )
-            : call
-        )]
-      ))
+      preamble.push(
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            t.identifier(field.localName!),
+            ts && field.typeAnnotation
+              ? assignTypeArguments(
+                  call,
+                  t.tsTypeParameterInstantiation([field.typeAnnotation.node])
+                )
+              : call
+          ),
+        ])
+      );
     }
   }
 
-  if (analysis.effects.cdmPath || analysis.effects.cduPath || analysis.effects.cwuPath) {
+  if (
+    analysis.effects.cdmPath ||
+    analysis.effects.cduPath ||
+    analysis.effects.cwuPath
+  ) {
     // Emit "raw effects"
 
     // Emit `const isMounted = useRef(false);`
-    preamble.push(t.variableDeclaration(
-      "const",
-      [t.variableDeclarator(
-        t.identifier(analysis.effects.isMountedLocalName!),
-        t.callExpression(
-          getReactImport("useRef", babel, analysis.superClassRef),
-          [t.booleanLiteral(false)]
-        )
-      )]
-    ));
+    preamble.push(
+      t.variableDeclaration("const", [
+        t.variableDeclarator(
+          t.identifier(analysis.effects.isMountedLocalName!),
+          t.callExpression(
+            getReactImport("useRef", babel, analysis.superClassRef),
+            [t.booleanLiteral(false)]
+          )
+        ),
+      ])
+    );
 
     // Emit first `useEffect` for componentDidMount/componentDidUpdate
     // It also updates `isMounted` -- needed for componentWillUnmount as well!
@@ -384,33 +461,39 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
         t.expressionStatement(
           t.callExpression(
             getReactImport("useEffect", babel, analysis.superClassRef),
-            [t.arrowFunctionExpression([], t.blockStatement([
-              t.ifStatement(
-                // Condition: `!isMountedLocalName.current`
-                t.unaryExpression("!",
-                  t.memberExpression(
-                    t.identifier(analysis.effects.isMountedLocalName!),
-                    t.identifier("current"),
-                  )
-                ),
-                // Consequent: `{ isMountedLocalName.current = true; ... }`
+            [
+              t.arrowFunctionExpression(
+                [],
                 t.blockStatement([
-                  t.expressionStatement(
-                    t.assignmentExpression(
-                      "=",
+                  t.ifStatement(
+                    // Condition: `!isMountedLocalName.current`
+                    t.unaryExpression(
+                      "!",
                       t.memberExpression(
                         t.identifier(analysis.effects.isMountedLocalName!),
-                        t.identifier("current"),
+                        t.identifier("current")
+                      )
+                    ),
+                    // Consequent: `{ isMountedLocalName.current = true; ... }`
+                    t.blockStatement([
+                      t.expressionStatement(
+                        t.assignmentExpression(
+                          "=",
+                          t.memberExpression(
+                            t.identifier(analysis.effects.isMountedLocalName!),
+                            t.identifier("current")
+                          ),
+                          t.booleanLiteral(true)
+                        )
                       ),
-                      t.booleanLiteral(true)
-                    )
+                      ...(analysis.effects.cdmPath?.node.body.body ?? []),
+                    ]),
+                    // Alternate: contents of componentDidUpdate, if any
+                    analysis.effects.cduPath?.node.body
                   ),
-                  ...(analysis.effects.cdmPath?.node.body.body ?? [])
-                ]),
-                // Alternate: contents of componentDidUpdate, if any
-                analysis.effects.cduPath?.node.body
-              )
-            ]))]
+                ])
+              ),
+            ]
           )
         ),
         "leading",
@@ -424,37 +507,46 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
       // To workaround dependency issues, store the latest callback in a ref
 
       // Emit `const cleanup = useRef(null);`
-      preamble.push(t.variableDeclaration(
-        "const",
-        [t.variableDeclarator(
-          t.identifier(analysis.effects.cleanupLocalName!),
-          assignTypeArguments(
-            t.callExpression(
-              getReactImport("useRef", babel, analysis.superClassRef),
-              [t.nullLiteral()]
-            ),
-            // Type annotation: useRef<(() => void) | null>
-            ts
-            ? t.tsTypeParameterInstantiation([
-                t.tsUnionType([
-                  t.tsFunctionType(null, [], t.tsTypeAnnotation(t.tsVoidKeyword())),
-                  t.tsNullKeyword()
-                ])
-              ])
-            : null
-          )
-        )]
-      ));
+      preamble.push(
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            t.identifier(analysis.effects.cleanupLocalName!),
+            assignTypeArguments(
+              t.callExpression(
+                getReactImport("useRef", babel, analysis.superClassRef),
+                [t.nullLiteral()]
+              ),
+              // Type annotation: useRef<(() => void) | null>
+              ts
+                ? t.tsTypeParameterInstantiation([
+                    t.tsUnionType([
+                      t.tsFunctionType(
+                        null,
+                        [],
+                        t.tsTypeAnnotation(t.tsVoidKeyword())
+                      ),
+                      t.tsNullKeyword(),
+                    ]),
+                  ])
+                : null
+            )
+          ),
+        ])
+      );
 
       // Emit `cleanup.current = () => { ... }`
-      preamble.push(t.expressionStatement(t.assignmentExpression(
-        "=",
-        t.memberExpression(
-          t.identifier(analysis.effects.cleanupLocalName!),
-          t.identifier("current")
-        ),
-        t.arrowFunctionExpression([], analysis.effects.cwuPath.node.body)
-      )));
+      preamble.push(
+        t.expressionStatement(
+          t.assignmentExpression(
+            "=",
+            t.memberExpression(
+              t.identifier(analysis.effects.cleanupLocalName!),
+              t.identifier("current")
+            ),
+            t.arrowFunctionExpression([], analysis.effects.cwuPath.node.body)
+          )
+        )
+      );
 
       // Emit the second `useEffect` -- this time with empty dependency array
       preamble.push(
@@ -463,43 +555,57 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
             t.callExpression(
               getReactImport("useEffect", babel, analysis.superClassRef),
               [
-                t.arrowFunctionExpression([], t.blockStatement([
-                  // Immediately return the cleanup function
-                  t.returnStatement(t.arrowFunctionExpression([], t.blockStatement([
-                    // Check isMounted
-                    t.ifStatement(
-                      // `if (isMounted.current)`
-                      t.memberExpression(
-                        t.identifier(analysis.effects.isMountedLocalName!),
-                        t.identifier("current")
-                      ),
-                      t.blockStatement([
-                        // `isMounted.current = false;`
-                        t.expressionStatement(
-                          t.assignmentExpression(
-                            "=",
+                t.arrowFunctionExpression(
+                  [],
+                  t.blockStatement([
+                    // Immediately return the cleanup function
+                    t.returnStatement(
+                      t.arrowFunctionExpression(
+                        [],
+                        t.blockStatement([
+                          // Check isMounted
+                          t.ifStatement(
+                            // `if (isMounted.current)`
                             t.memberExpression(
-                              t.identifier(analysis.effects.isMountedLocalName!),
+                              t.identifier(
+                                analysis.effects.isMountedLocalName!
+                              ),
                               t.identifier("current")
                             ),
-                            t.booleanLiteral(false)
-                          )
-                        ),
-                        // `cleanup.current?.()`
-                        t.expressionStatement(
-                          t.optionalCallExpression(
-                            t.memberExpression(
-                              t.identifier(analysis.effects.cleanupLocalName!),
-                              t.identifier("current")
-                            ),
-                            [],
-                            true
-                          )
-                        )
-                      ])
-                    )
-                  ])))
-                ])),
+                            t.blockStatement([
+                              // `isMounted.current = false;`
+                              t.expressionStatement(
+                                t.assignmentExpression(
+                                  "=",
+                                  t.memberExpression(
+                                    t.identifier(
+                                      analysis.effects.isMountedLocalName!
+                                    ),
+                                    t.identifier("current")
+                                  ),
+                                  t.booleanLiteral(false)
+                                )
+                              ),
+                              // `cleanup.current?.()`
+                              t.expressionStatement(
+                                t.optionalCallExpression(
+                                  t.memberExpression(
+                                    t.identifier(
+                                      analysis.effects.cleanupLocalName!
+                                    ),
+                                    t.identifier("current")
+                                  ),
+                                  [],
+                                  true
+                                )
+                              ),
+                            ])
+                          ),
+                        ])
+                      )
+                    ),
+                  ])
+                ),
                 t.arrayExpression([]),
               ]
             )
@@ -519,24 +625,29 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
   // so we fall back to functions when type parameters are present.
   const functionNeeded = analysis.isPure || !!analysis.typeParameters;
   const params = needsProps(analysis)
-    ? [assignTypeAnnotation(
-        t.identifier("props"),
-        // If the function is generic, put type annotations here instead of the `const` to be defined.
-        // TODO: take children into account, while being careful about difference between `@types/react` v17 and v18
-        analysis.typeParameters
-        ? analysis.propsTyping
-          ? t.tsTypeAnnotation(analysis.propsTyping.node)
-          : undefined
-        : undefined
-      )]
+    ? [
+        assignTypeAnnotation(
+          t.identifier("props"),
+          // If the function is generic, put type annotations here instead of the `const` to be defined.
+          // TODO: take children into account, while being careful about difference between `@types/react` v17 and v18
+          analysis.typeParameters
+            ? analysis.propsTyping
+              ? t.tsTypeAnnotation(analysis.propsTyping.node)
+              : undefined
+            : undefined
+        ),
+      ]
     : [];
   // If the function is generic, put type annotations here instead of the `const` to be defined.
   const returnType = analysis.typeParameters
-      // Construct `React.ReactElement | null`
-    ? t.tsTypeAnnotation(
+    ? // Construct `React.ReactElement | null`
+      t.tsTypeAnnotation(
         t.tsUnionType([
           t.tsTypeReference(
-            toTSEntity(getReactImport("ReactElement", babel, analysis.superClassRef), babel)
+            toTSEntity(
+              getReactImport("ReactElement", babel, analysis.superClassRef),
+              babel
+            )
           ),
           t.tsNullKeyword(),
         ])
@@ -546,14 +657,11 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
     assignReturnType(
       functionNeeded
         ? t.functionExpression(
-          analysis.name ? t.cloneNode(analysis.name) : undefined,
-          params,
-          bodyNode
-        )
-        : t.arrowFunctionExpression(
-          params,
-          bodyNode
-        ),
+            analysis.name ? t.cloneNode(analysis.name) : undefined,
+            params,
+            bodyNode
+          )
+        : t.arrowFunctionExpression(params, bodyNode),
       returnType
     ),
     analysis.typeParameters?.node
@@ -565,24 +673,35 @@ function transformClass(analysis: AnalysisResult, options: { ts: boolean }, babe
           [funcNode]
         )
       : funcNode,
-    typeNode: ts && !analysis.typeParameters
-      ? t.tsTypeReference(
-        toTSEntity(getReactImport("FC", babel, analysis.superClassRef), babel),
-        analysis.propsTyping
-        ? t.tsTypeParameterInstantiation([analysis.propsTyping.node])
-        : null
-      )
-      : undefined,
+    typeNode:
+      ts && !analysis.typeParameters
+        ? t.tsTypeReference(
+            toTSEntity(
+              getReactImport("FC", babel, analysis.superClassRef),
+              babel
+            ),
+            analysis.propsTyping
+              ? t.tsTypeParameterInstantiation([analysis.propsTyping.node])
+              : null
+          )
+        : undefined,
   };
 }
 
 function toTSEntity(
   expr: Expression,
-  babel: typeof import("@babel/core"),
+  babel: typeof import("@babel/core")
 ): TSEntityName {
   const { types: t } = babel;
-  if (expr.type === "MemberExpression" && !expr.computed && expr.property.type === "Identifier") {
-    return t.tsQualifiedName(toTSEntity(expr.object, babel), t.cloneNode(expr.property));
+  if (
+    expr.type === "MemberExpression" &&
+    !expr.computed &&
+    expr.property.type === "Identifier"
+  ) {
+    return t.tsQualifiedName(
+      toTSEntity(expr.object, babel),
+      t.cloneNode(expr.property)
+    );
   } else if (expr.type === "Identifier") {
     return t.cloneNode(expr);
   }
@@ -598,13 +717,13 @@ function getReactImport(
   if (superClassRef.type === "global") {
     return t.memberExpression(
       t.identifier(superClassRef.globalName),
-      t.identifier(name),
+      t.identifier(name)
     );
   }
   if (superClassRef.kind === "ns") {
     return t.memberExpression(
       t.identifier(superClassRef.specPath.node.local.name),
-      t.identifier(name),
+      t.identifier(name)
     );
   }
   const decl = superClassRef.specPath.parentPath as NodePath<ImportDeclaration>;
@@ -614,18 +733,25 @@ function getReactImport(
     }
   }
   // No existing decl
-  const newName = decl.scope.getBinding(name) ? decl.scope.generateUid(name) : name;
+  const newName = decl.scope.getBinding(name)
+    ? decl.scope.generateUid(name)
+    : name;
   const local = t.identifier(newName);
-  decl.get("specifiers")[decl.node.specifiers.length - 1]!.insertAfter(
-    t.importSpecifier(
-      local,
-      name === newName ? local : t.identifier(newName)
-    )
-  );
+  decl
+    .get("specifiers")
+    [decl.node.specifiers.length - 1]!.insertAfter(
+      t.importSpecifier(local, name === newName ? local : t.identifier(newName))
+    );
   return t.identifier(newName);
 }
 
-type FunctionLike = FunctionDeclaration | FunctionExpression | ArrowFunctionExpression | ClassMethod | ClassPrivateMethod | ObjectMethod;
+type FunctionLike =
+  | FunctionDeclaration
+  | FunctionExpression
+  | ArrowFunctionExpression
+  | ClassMethod
+  | ClassPrivateMethod
+  | ObjectMethod;
 
 function functionName(node: FunctionLike): Identifier | undefined {
   switch (node.type) {
@@ -647,12 +773,10 @@ function functionDeclarationFrom(
         name ?? functionName(node),
         node.params as (Identifier | RestElement | Pattern)[],
         node.body.type === "BlockStatement"
-        ? node.body
-        : t.blockStatement([
-            t.returnStatement(node.body)
-          ]),
+          ? node.body
+          : t.blockStatement([t.returnStatement(node.body)]),
         node.generator,
-        node.async,
+        node.async
       ),
       node.returnType
     ),
@@ -672,12 +796,10 @@ function functionExpressionFrom(
         name ?? functionName(node),
         node.params as (Identifier | RestElement | Pattern)[],
         node.body.type === "BlockStatement"
-        ? node.body
-        : t.blockStatement([
-            t.returnStatement(node.body)
-          ]),
+          ? node.body
+          : t.blockStatement([t.returnStatement(node.body)]),
         node.generator,
-        node.async,
+        node.async
       ),
       node.returnType
     ),
@@ -695,7 +817,7 @@ function arrowFunctionExpressionFrom(
       t.arrowFunctionExpression(
         node.params as (Identifier | RestElement | Pattern)[],
         node.body,
-        node.async,
+        node.async
       ),
       node.returnType
     ),
@@ -707,23 +829,19 @@ function constDeclaration(
   babel: typeof import("@babel/core"),
   id: Identifier,
   init: Expression,
-  typeAnnotation?: TSTypeAnnotation,
+  typeAnnotation?: TSTypeAnnotation
 ): VariableDeclaration | FunctionDeclaration {
   const { types: t } = babel;
   if (
-    init.type === "FunctionExpression"
-    && (!init.id || init.id.name === id.name)
-    && !typeAnnotation
+    init.type === "FunctionExpression" &&
+    (!init.id || init.id.name === id.name) &&
+    !typeAnnotation
   ) {
     return functionDeclarationFrom(babel, init, id);
   }
-  return t.variableDeclaration(
-    "const",
-    [t.variableDeclarator(
-      assignTypeAnnotation(id, typeAnnotation),
-      init
-    )]
-  );
+  return t.variableDeclaration("const", [
+    t.variableDeclarator(assignTypeAnnotation(id, typeAnnotation), init),
+  ]);
 }
 
 /**
@@ -739,9 +857,9 @@ function refreshComments(node: any) {
     comment.trailing ??= true;
   }
   node.comments = [
-    ...node.leadingComments ?? [],
-    ...node.innerComments ?? [],
-    ...node.trailingComments ?? [],
+    ...(node.leadingComments ?? []),
+    ...(node.innerComments ?? []),
+    ...(node.trailingComments ?? []),
   ];
   node.original = undefined;
 }

@@ -15,7 +15,7 @@ export function analyzeEffects(
   componentDidMount: ClassFieldAnalysis,
   componentDidUpdate: ClassFieldAnalysis,
   componentWillUnmount: ClassFieldAnalysis,
-  userDefined: UserDefinedAnalysis,
+  userDefined: UserDefinedAnalysis
 ): EffectAnalysis {
   const cdmInit = componentDidMount.sites.find((site) => site.init);
   const cduInit = componentDidUpdate.sites.find((site) => site.init);
@@ -62,11 +62,12 @@ export function analyzeEffects(
 
   for (const [name, field] of userDefined.fields) {
     if (
-      field.type === "user_defined_function"
-      && field.sites.some((site) =>
-        site.type === "expr"
-        && site.owner === "componentWillUnmount"
-        && !site.path.parentPath.isCallExpression()
+      field.type === "user_defined_function" &&
+      field.sites.some(
+        (site) =>
+          site.type === "expr" &&
+          site.owner === "componentWillUnmount" &&
+          !site.path.parentPath.isCallExpression()
       )
     ) {
       // A user-defined function is used without immediately calling in componentWillUnmount.
@@ -90,7 +91,9 @@ export function analyzeEffects(
       // We will implement a separate paths for the patterns above,
       // but for now we just error out to avoid risks.
 
-      throw new AnalysisError(`Possible event unregistration of ${name} in componentWillUnmount`);
+      throw new AnalysisError(
+        `Possible event unregistration of ${name} in componentWillUnmount`
+      );
     }
   }
   return {

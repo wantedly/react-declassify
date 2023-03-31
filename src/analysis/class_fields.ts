@@ -4,8 +4,34 @@
 // Both the declarations and the usages are collected.
 
 import type { NodePath } from "@babel/core";
-import type { AssignmentExpression, CallExpression, ClassAccessorProperty, ClassDeclaration, ClassMethod, ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Expression, ExpressionStatement, MemberExpression, ThisExpression, TSDeclareMethod, TSType } from "@babel/types";
-import { getOr, isClassAccessorProperty, isClassMethodLike, isClassMethodOrDecl, isClassPropertyLike, isNamedClassElement, isStaticBlock, memberName, memberRefName, nonNullPath } from "../utils.js";
+import type {
+  AssignmentExpression,
+  CallExpression,
+  ClassAccessorProperty,
+  ClassDeclaration,
+  ClassMethod,
+  ClassPrivateMethod,
+  ClassPrivateProperty,
+  ClassProperty,
+  Expression,
+  ExpressionStatement,
+  MemberExpression,
+  ThisExpression,
+  TSDeclareMethod,
+  TSType,
+} from "@babel/types";
+import {
+  getOr,
+  isClassAccessorProperty,
+  isClassMethodLike,
+  isClassMethodOrDecl,
+  isClassPropertyLike,
+  isNamedClassElement,
+  isStaticBlock,
+  memberName,
+  memberRefName,
+  nonNullPath,
+} from "../utils.js";
 import { AnalysisError } from "./error.js";
 
 /**
@@ -30,9 +56,7 @@ export type ClassFieldAnalysis = {
 /**
  * A place where the class field is declared or used.
  */
-export type ClassFieldSite =
-  | ClassFieldDeclSite
-  | ClassFieldExprSite;
+export type ClassFieldSite = ClassFieldDeclSite | ClassFieldExprSite;
 
 export type ClassFieldDeclSite = {
   type: "decl";
@@ -43,7 +67,15 @@ export type ClassFieldDeclSite = {
    * - Assignment to `this` in the constructor (instance case)
    * - Assignment to `this` in a static initialization block (static case)
    */
-  path: NodePath<ClassProperty | ClassPrivateProperty | ClassMethod | ClassPrivateMethod | ClassAccessorProperty | TSDeclareMethod | AssignmentExpression>;
+  path: NodePath<
+    | ClassProperty
+    | ClassPrivateProperty
+    | ClassMethod
+    | ClassPrivateMethod
+    | ClassAccessorProperty
+    | TSDeclareMethod
+    | AssignmentExpression
+  >;
   /**
    * Where is it referenced in?
    */
@@ -88,24 +120,28 @@ export type ClassFieldExprSite = {
 /**
  * Essentially a TSTypeAnnotation, but accounts for TSDeclareMethod as well.
  */
-export type FieldTyping = {
-  type: "type_value";
-  valueTypePath: NodePath<TSType>;
-} | {
-  type: "type_method";
-  methodDeclPath: NodePath<TSDeclareMethod>;
-}
+export type FieldTyping =
+  | {
+      type: "type_value";
+      valueTypePath: NodePath<TSType>;
+    }
+  | {
+      type: "type_method";
+      methodDeclPath: NodePath<TSDeclareMethod>;
+    };
 
 /**
  * Essentially an Expression, but accounts for ClassMethod as well.
  */
-export type FieldInit = {
-  type: "init_value";
-  valuePath: NodePath<Expression>
-} | {
-  type: "init_method";
-  methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
-};
+export type FieldInit =
+  | {
+      type: "init_value";
+      valuePath: NodePath<Expression>;
+    }
+  | {
+      type: "init_method";
+      methodPath: NodePath<ClassMethod | ClassPrivateMethod>;
+    };
 
 /**
  * Appearance of `this` as in `this.foo.bind(this)`
@@ -131,15 +167,19 @@ export type BindThisSite = {
  * - Instance fields ... `this.foo`
  * - Static fields ... `C.foo`, where `C` is the class
  */
-export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassFieldsAnalysis {
+export function analyzeClassFields(
+  path: NodePath<ClassDeclaration>
+): ClassFieldsAnalysis {
   const instanceFields = new Map<string, ClassFieldAnalysis>();
-  const getInstanceField = (name: string) => getOr(instanceFields, name, () => ({ sites: [] }));
+  const getInstanceField = (name: string) =>
+    getOr(instanceFields, name, () => ({ sites: [] }));
   const staticFields = new Map<string, ClassFieldAnalysis>();
-  const getStaticField = (name: string) => getOr(staticFields, name, () => ({ sites: [] }));
+  const getStaticField = (name: string) =>
+    getOr(staticFields, name, () => ({ sites: [] }));
   let constructor: NodePath<ClassMethod> | undefined = undefined;
   const bodies: {
-    owner: string | undefined,
-    path: NodePath,
+    owner: string | undefined;
+    path: NodePath;
   }[] = [];
   // 1st pass: look for class field definitions
   for (const itemPath of path.get("body").get("body")) {
@@ -157,28 +197,32 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         // - May have a type annotation: `foo: number;` or not: `foo;`
         const valuePath = nonNullPath<Expression>(itemPath.get("value"));
         const typeAnnotation = itemPath.get("typeAnnotation");
-        const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation() ? typeAnnotation : undefined;
+        const typeAnnotation_ = typeAnnotation.isTSTypeAnnotation()
+          ? typeAnnotation
+          : undefined;
         field.sites.push({
           type: "decl",
           path: itemPath,
           owner: undefined,
           typing: typeAnnotation_
             ? {
-              type: "type_value",
-              valueTypePath: typeAnnotation_.get("typeAnnotation"),
-            }
+                type: "type_value",
+                valueTypePath: typeAnnotation_.get("typeAnnotation"),
+              }
             : undefined,
-          init: valuePath ?  { type: "init_value", valuePath } : undefined,
+          init: valuePath ? { type: "init_value", valuePath } : undefined,
           hasWrite: undefined,
-          hasSideEffect: !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
+          hasSideEffect:
+            !!itemPath.node.value && estimateSideEffect(itemPath.node.value),
         });
         if (valuePath) {
           // Initializer should be analyzed in step 2 too (considered to be in the constructor)
           bodies.push({
             owner:
-              valuePath.isFunctionExpression() || valuePath.isArrowFunctionExpression()
-              ? name
-              : undefined,
+              valuePath.isFunctionExpression() ||
+              valuePath.isArrowFunctionExpression()
+                ? name
+                : undefined,
             path: valuePath,
           });
         }
@@ -195,9 +239,9 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
             // We put `typing` here only when it is type-only
             typing: itemPath.isTSDeclareMethod()
               ? {
-                type: "type_method",
-                methodDeclPath: itemPath,
-              }
+                  type: "type_method",
+                  methodDeclPath: itemPath,
+                }
               : undefined,
             init: isClassMethodLike(itemPath)
               ? { type: "init_method", methodPath: itemPath }
@@ -258,10 +302,11 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
 
     // Check super() call
     // Must be super(props) or super(props, context)
-    const superCallIndex = stmts.findIndex((stmt) =>
-      stmt.node.type === "ExpressionStatement"
-      && stmt.node.expression.type === "CallExpression"
-      && stmt.node.expression.callee.type === "Super"
+    const superCallIndex = stmts.findIndex(
+      (stmt) =>
+        stmt.node.type === "ExpressionStatement" &&
+        stmt.node.expression.type === "CallExpression" &&
+        stmt.node.expression.callee.type === "Super"
     );
     if (superCallIndex === -1) {
       throw new AnalysisError(`No super call`);
@@ -269,31 +314,39 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
       throw new AnalysisError(`No immediate super call`);
     }
     const superCall = stmts[superCallIndex]!;
-    const superCallArgs =
-      ((superCall.node as ExpressionStatement).expression as CallExpression).arguments;
+    const superCallArgs = (
+      (superCall.node as ExpressionStatement).expression as CallExpression
+    ).arguments;
     if (superCallArgs.length > 1) {
       throw new AnalysisError(`Too many arguments for super()`);
     } else if (superCallArgs.length < 1) {
       throw new AnalysisError(`Too few arguments for super()`);
     }
     const superCallArg = superCallArgs[0]!;
-    if (superCallArg.type !== "Identifier" || superCallArg.name !== param.name) {
+    if (
+      superCallArg.type !== "Identifier" ||
+      superCallArg.name !== param.name
+    ) {
       throw new AnalysisError(`Invalid argument for super()`);
     }
 
     // Analyze init statements (must be in the form of `this.foo = expr;`)
     const initStmts = stmts.slice(superCallIndex + 1);
     for (const stmt of initStmts) {
-      if (!(
-        stmt.node.type === "ExpressionStatement"
-        && stmt.node.expression.type === "AssignmentExpression"
-        && stmt.node.expression.operator === "="
-        && stmt.node.expression.left.type === "MemberExpression"
-        && stmt.node.expression.left.object.type === "ThisExpression"
-      )) {
+      if (
+        !(
+          stmt.node.type === "ExpressionStatement" &&
+          stmt.node.expression.type === "AssignmentExpression" &&
+          stmt.node.expression.operator === "=" &&
+          stmt.node.expression.left.type === "MemberExpression" &&
+          stmt.node.expression.left.object.type === "ThisExpression"
+        )
+      ) {
         throw new AnalysisError(`Non-analyzable initialization in constructor`);
       }
-      const exprPath = (stmt as NodePath<ExpressionStatement>).get("expression") as NodePath<AssignmentExpression>;
+      const exprPath = (stmt as NodePath<ExpressionStatement>).get(
+        "expression"
+      ) as NodePath<AssignmentExpression>;
       const name = memberRefName(stmt.node.expression.left);
       if (name == null) {
         throw new AnalysisError(`Non-analyzable initialization in constructor`);
@@ -326,23 +379,27 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     traverseThis(path, (thisPath) => {
       // Ensure this is part of `this.foo`
       const thisMemberPath = thisPath.parentPath;
-      if (!thisMemberPath.isMemberExpression({
-        object: thisPath.node
-      })) {
+      if (
+        !thisMemberPath.isMemberExpression({
+          object: thisPath.node,
+        })
+      ) {
         // Check for bind arguments: `this.foo.bind(this)`
         if (
-          thisMemberPath.isCallExpression()
-          && thisMemberPath.node.arguments[0] === thisPath.node
-          && thisMemberPath.node.callee.type === "MemberExpression"
-          && memberRefName(thisMemberPath.node.callee) === "bind"
-          && thisMemberPath.node.callee.object.type === "MemberExpression"
-          && thisMemberPath.node.callee.object.object.type === "ThisExpression"
+          thisMemberPath.isCallExpression() &&
+          thisMemberPath.node.arguments[0] === thisPath.node &&
+          thisMemberPath.node.callee.type === "MemberExpression" &&
+          memberRefName(thisMemberPath.node.callee) === "bind" &&
+          thisMemberPath.node.callee.object.type === "MemberExpression" &&
+          thisMemberPath.node.callee.object.object.type === "ThisExpression"
         ) {
           bindThisSites.push({
             bindsMore: thisMemberPath.node.arguments.length > 1,
             thisArgPath: thisPath,
             binderPath: thisMemberPath,
-            bindeePath: (thisMemberPath.get("callee") as NodePath<MemberExpression>).get("object") as NodePath<MemberExpression>,
+            bindeePath: (
+              thisMemberPath.get("callee") as NodePath<MemberExpression>
+            ).get("object") as NodePath<MemberExpression>,
             // Checked later
             isSelfBindingInitialization: false,
           });
@@ -363,12 +420,12 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         // `this.foo = 0;` (incl. operator assignment)
         thisMemberParentPath.isAssignmentExpression({
           left: thisMemberPath.node,
-        })
+        }) ||
         // `delete this.foo;`
-        || thisMemberParentPath.isUnaryExpression({
+        thisMemberParentPath.isUnaryExpression({
           operator: "delete",
           argument: thisMemberPath.node,
-        })
+        });
 
       field.sites.push({
         type: "expr",
@@ -377,7 +434,7 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
         typing: undefined,
         init: undefined,
         hasWrite,
-        hasSideEffect: undefined
+        hasSideEffect: undefined,
       });
     });
   }
@@ -388,16 +445,15 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   // Special handling for self-binding initialization (`this.foo = this.foo.bind(this)`)
   for (const [name, field] of instanceFields) {
     field.sites = field.sites.filter((site) => {
-      if (
-        site.type === "decl"
-        && site.init?.type === "init_value"
-      ) {
+      if (site.type === "decl" && site.init?.type === "init_value") {
         const valuePath = site.init.valuePath;
-        const bindThisSite = bindThisSites.find((binder) => binder.binderPath === valuePath)
+        const bindThisSite = bindThisSites.find(
+          (binder) => binder.binderPath === valuePath
+        );
         if (
-          bindThisSite
-          && !bindThisSite.bindsMore
-          && memberRefName(bindThisSite.bindeePath.node) === name
+          bindThisSite &&
+          !bindThisSite.bindsMore &&
+          memberRefName(bindThisSite.bindeePath.node) === name
         ) {
           bindThisSite.isSelfBindingInitialization = true;
           // Skip the self-binding initialization (lhs)
@@ -410,7 +466,9 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   for (const [, field] of instanceFields) {
     field.sites = field.sites.filter((site) => {
       if (site.type === "expr") {
-        const bindThisSite = bindThisSites.find((binder) => binder.bindeePath === site.path)
+        const bindThisSite = bindThisSites.find(
+          (binder) => binder.bindeePath === site.path
+        );
         if (bindThisSite?.isSelfBindingInitialization) {
           // Skip the self-binding initialization (rhs)
           return false;
@@ -425,11 +483,17 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     if (field.sites.length === 0) {
       instanceFields.delete(name);
     }
-    const numInits = field.sites.reduce((n, site) => n + Number(!!site.init), 0);
+    const numInits = field.sites.reduce(
+      (n, site) => n + Number(!!site.init),
+      0
+    );
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);
     }
-    const numTypes = field.sites.reduce((n, site) => n + Number(!!site.typing), 0);
+    const numTypes = field.sites.reduce(
+      (n, site) => n + Number(!!site.typing),
+      0
+    );
     if (numTypes > 1) {
       throw new AnalysisError(`${name} is declared more than once`);
     }
@@ -438,11 +502,17 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
     if (field.sites.length === 0) {
       instanceFields.delete(name);
     }
-    const numInits = field.sites.reduce((n, site) => n + Number(!!site.init), 0);
+    const numInits = field.sites.reduce(
+      (n, site) => n + Number(!!site.init),
+      0
+    );
     if (numInits > 1) {
       throw new AnalysisError(`static ${name} is initialized more than once`);
     }
-    const numTypes = field.sites.reduce((n, site) => n + Number(!!site.typing), 0);
+    const numTypes = field.sites.reduce(
+      (n, site) => n + Number(!!site.typing),
+      0
+    );
     if (numTypes > 1) {
       throw new AnalysisError(`static ${name} is declared more than once`);
     }
@@ -451,7 +521,10 @@ export function analyzeClassFields(path: NodePath<ClassDeclaration>): ClassField
   return { instanceFields, staticFields, bindThisSites };
 }
 
-function traverseThis(path: NodePath, visit: (path: NodePath<ThisExpression>) => void) {
+function traverseThis(
+  path: NodePath,
+  visit: (path: NodePath<ThisExpression>) => void
+) {
   path.traverse({
     ThisExpression: visit,
     FunctionDeclaration(path) {
@@ -485,7 +558,11 @@ function estimateSideEffect(expr: Expression): boolean {
 
     case "MemberExpression":
       // Assume `foo.bar` to be pure
-      return estimateSideEffect(expr.object) || (expr.property.type !== "PrivateName" && estimateSideEffect(expr.property));
+      return (
+        estimateSideEffect(expr.object) ||
+        (expr.property.type !== "PrivateName" &&
+          estimateSideEffect(expr.property))
+      );
 
     case "UnaryExpression":
       switch (expr.operator) {
@@ -509,20 +586,21 @@ function estimateSideEffect(expr: Expression): boolean {
     case "ArrayExpression":
       return expr.elements.some((elem) =>
         elem == null
-        ? false
-        : elem.type === "SpreadElement"
-        ? estimateSideEffect(elem.argument)
-        : estimateSideEffect(elem)
+          ? false
+          : elem.type === "SpreadElement"
+          ? estimateSideEffect(elem.argument)
+          : estimateSideEffect(elem)
       );
     case "ObjectExpression":
       return expr.properties.some((elem) =>
         elem.type === "SpreadElement"
-        ? estimateSideEffect(elem.argument)
-        : elem.type === "ObjectMethod"
-        ? estimateSideEffect(elem.key)
-        : elem.key.type === "PrivateName"
+          ? estimateSideEffect(elem.argument)
+          : elem.type === "ObjectMethod"
+          ? estimateSideEffect(elem.key)
+          : elem.key.type === "PrivateName"
           ? estimateSideEffect(elem.value as Expression)
-          : estimateSideEffect(elem.key) && estimateSideEffect(elem.value as Expression)
+          : estimateSideEffect(elem.key) &&
+            estimateSideEffect(elem.value as Expression)
       );
   }
   return true;

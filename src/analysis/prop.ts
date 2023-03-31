@@ -1,6 +1,11 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
-import type { Expression, MemberExpression, TSMethodSignature, TSPropertySignature } from "@babel/types";
+import type {
+  Expression,
+  MemberExpression,
+  TSMethodSignature,
+  TSPropertySignature,
+} from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import type { LocalManager } from "./local.js";
@@ -39,9 +44,9 @@ export type PropSite = {
 };
 
 export type PropAlias = {
-  scope: Scope,
-  localName: string,
-  owner: string | undefined,
+  scope: Scope;
+  localName: string;
+  owner: string | undefined;
 };
 
 /**
@@ -62,15 +67,16 @@ export function analyzeProps(
   propsObjAnalysis: ClassFieldAnalysis,
   defaultPropsObjAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
-  preanalysis: PreAnalysisResult,
+  preanalysis: PreAnalysisResult
 ): PropsObjAnalysis {
   const defaultProps = analyzeDefaultProps(defaultPropsObjAnalysis);
   const newObjSites: PropsObjSite[] = [];
   const props = new Map<string, PropAnalysis>();
-  const getProp = (name: string) => getOr(props, name, () => ({
-    sites: [],
-    aliases: [],
-  }));
+  const getProp = (name: string) =>
+    getOr(props, name, () => ({
+      sites: [],
+      aliases: [],
+    }));
 
   for (const site of propsObjAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
@@ -96,7 +102,9 @@ export function analyzeProps(
       parentSite.decomposedAsAliases = true;
     } else {
       if (defaultProps && !memberAnalysis.memberExpr) {
-        throw new AnalysisError(`Non-analyzable this.props in presence of defaultProps`);
+        throw new AnalysisError(
+          `Non-analyzable this.props in presence of defaultProps`
+        );
       }
       if (memberAnalysis.memberExpr) {
         const child: PropSite = {
@@ -133,7 +141,7 @@ export function needAlias(prop: PropAnalysis): boolean {
 }
 
 function analyzeDefaultProps(
-  defaultPropsAnalysis: ClassFieldAnalysis,
+  defaultPropsAnalysis: ClassFieldAnalysis
 ): Map<string, NodePath<Expression>> | undefined {
   for (const site of defaultPropsAnalysis.sites) {
     if (!site.init) {
@@ -170,4 +178,3 @@ function analyzeDefaultProps(
   }
   return defaultPropsFields.size > 0 ? defaultPropsFields : undefined;
 }
-

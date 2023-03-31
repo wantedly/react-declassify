@@ -21,7 +21,9 @@ export type MemberAliasing = {
   idPath: NodePath<Identifier>;
 };
 
-export function trackMember(path: NodePath<Expression>): ObjectExpressionAnalysis {
+export function trackMember(
+  path: NodePath<Expression>
+): ObjectExpressionAnalysis {
   let memberExpr: MemberExprInfo | undefined = undefined;
   let memberAliases: Map<string, MemberAliasing> | undefined = undefined;
   let fullyDecomposed = false;
@@ -76,7 +78,9 @@ export function trackMember(path: NodePath<Expression>): ObjectExpressionAnalysi
   return { path, memberExpr, memberAliases, fullyDecomposed };
 }
 
-function getSimpleAliasing(path: NodePath<Expression>): NodePath<Identifier> | undefined {
+function getSimpleAliasing(
+  path: NodePath<Expression>
+): NodePath<Identifier> | undefined {
   const path1 = path.parentPath;
   if (path1.isVariableDeclarator({ init: path.node })) {
     const path2 = path1.parentPath;

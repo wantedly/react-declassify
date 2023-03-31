@@ -2,9 +2,9 @@
 
 This codemod automatically transforms **React class components** into **React functional components using Hooks** for you!
 
-|Before|After|
-|---|---|
-|![before example 1](./img/example1-before.png)|![after example 1](./img/example1-after.png)|
+| Before                                         | After                                        |
+| ---------------------------------------------- | -------------------------------------------- |
+| ![before example 1](./img/example1-before.png) | ![after example 1](./img/example1-after.png) |
 
 ## Features
 
@@ -31,6 +31,7 @@ npx codemod --plugin react-declassify 'src/**/*.tsx'
 
 Before:
 
+<!-- prettier-ignore -->
 ```tsx
 import React from "react";
 
@@ -73,6 +74,7 @@ export class C extends React.Component<Props, State> {
 
 After:
 
+<!-- prettier-ignore -->
 ```tsx
 import React from "react";
 
@@ -106,6 +108,7 @@ export const C: React.FC<Props> = props => {
 
 Before:
 
+<!-- prettier-ignore -->
 ```jsx
 import React from "react";
 
@@ -125,6 +128,7 @@ export class C extends React.Component {
 
 After:
 
+<!-- prettier-ignore -->
 ```jsx
 import React from "react";
 
@@ -201,6 +205,7 @@ Class components may receive refs; this is to be supported in the future. Once i
 
 This codemod relies on [recast](https://github.com/benjamn/recast) for pretty-printing and sometimes generates code that does not match your preferred style. This is ineviable. For example it does not currently emit parentheses for the arrow function:
 
+<!-- prettier-ignore -->
 ```js
 const MyComponent: FC = props => {
   //                    ^^^^^ no parentheses

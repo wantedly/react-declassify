@@ -1,5 +1,12 @@
 import type { NodePath } from "@babel/core";
-import type { CallExpression, Expression, Identifier, ObjectProperty, RestElement, TSType } from "@babel/types";
+import type {
+  CallExpression,
+  Expression,
+  Identifier,
+  ObjectProperty,
+  RestElement,
+  TSType,
+} from "@babel/types";
 import { getOr, memberName } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { PreAnalysisResult } from "./pre.js";
@@ -36,32 +43,35 @@ export type StateExprSite = {
 export type SetStateSite = {
   path: NodePath<CallExpression>;
   fields: SetStateFieldSite[];
-}
+};
 
 export type SetStateFieldSite = {
   name: string;
   valuePath: NodePath<Expression>;
-}
-
-export type StateTypeAnnotation = {
-  type: "simple";
-  path: NodePath<TSType>;
-} | {
-  type: "method";
-  params: NodePath<Identifier | RestElement>[];
-  returnType: NodePath<TSType>;
 };
+
+export type StateTypeAnnotation =
+  | {
+      type: "simple";
+      path: NodePath<TSType>;
+    }
+  | {
+      type: "method";
+      params: NodePath<Identifier | RestElement>[];
+      returnType: NodePath<TSType>;
+    };
 
 export function analyzeState(
   stateObjAnalysis: ClassFieldAnalysis,
   setStateAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
-  preanalysis: PreAnalysisResult,
+  preanalysis: PreAnalysisResult
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
-  const getState = (name: string) => getOr(states, name, () => ({
-    sites: [],
-  }));
+  const getState = (name: string) =>
+    getOr(states, name, () => ({
+      sites: [],
+    }));
 
   const init = stateObjAnalysis.sites.find((site) => site.init);
   if (init) {
@@ -184,16 +194,21 @@ export function analyzeState(
           type: "method",
           params,
           returnType: returnAnnot.get("typeAnnotation"),
-        }
+        };
       }
     }
   }
   for (const [name, state] of states.entries()) {
-    const numInits = state.sites.reduce((n, site) => n + Number(site.type === "state_init"), 0);
+    const numInits = state.sites.reduce(
+      (n, site) => n + Number(site.type === "state_init"),
+      0
+    );
     if (numInits > 1) {
       throw new AnalysisError(`${name} is initialized more than once`);
     }
-    state.init = state.sites.find((site): site is StateInitSite => site.type === "state_init");
+    state.init = state.sites.find(
+      (site): site is StateInitSite => site.type === "state_init"
+    );
   }
   return { states, setStateSites };
 }

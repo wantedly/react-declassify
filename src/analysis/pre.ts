@@ -1,7 +1,17 @@
 // This file contains analysis paths for class heads.
 
 import type { NodePath } from "@babel/core";
-import type { BlockStatement, ClassDeclaration, Identifier, Program, TSInterfaceBody, TSMethodSignature, TSPropertySignature, TSType, TSTypeParameterDeclaration } from "@babel/types";
+import type {
+  BlockStatement,
+  ClassDeclaration,
+  Identifier,
+  Program,
+  TSInterfaceBody,
+  TSMethodSignature,
+  TSPropertySignature,
+  TSType,
+  TSTypeParameterDeclaration,
+} from "@babel/types";
 import { memberName, nonNullPath } from "../utils.js";
 import { analyzeLibRef, isReactRef, LibRef } from "./lib.js";
 
@@ -45,8 +55,14 @@ export type PreAnalysisResult = {
  * @param path the pass to the class node
  * @returns an object containing analysis result, if the class should be transformed
  */
-export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisResult | undefined {
-  if (path.node.leadingComments?.some((comment) => /react-declassify-disable/.test(comment.value))) {
+export function preanalyzeClass(
+  path: NodePath<ClassDeclaration>
+): PreAnalysisResult | undefined {
+  if (
+    path.node.leadingComments?.some((comment) =>
+      /react-declassify-disable/.test(comment.value)
+    )
+  ) {
     // Explicitly disabled
     //
     // E.g.
@@ -57,12 +73,13 @@ export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisRe
     return;
   }
   if (
-    path.node.leadingComments?.some((comment) =>
-      comment.type === "CommentBlock" &&
-      /^\*/.test(comment.value) &&
-      /@abstract/.test(comment.value)
-    )
-    || path.node.abstract
+    path.node.leadingComments?.some(
+      (comment) =>
+        comment.type === "CommentBlock" &&
+        /^\*/.test(comment.value) &&
+        /@abstract/.test(comment.value)
+    ) ||
+    path.node.abstract
   ) {
     // This is an abstract class to be inherited; do not attempt transformation.
     //
@@ -84,11 +101,14 @@ export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisRe
   const superClassRef = analyzeLibRef(superClass);
   if (
     // Subclass of an unknown class
-    !superClassRef
+    !superClassRef ||
     // Not a react thing, presumably
-    || !isReactRef(superClassRef)
+    !isReactRef(superClassRef) ||
     // React.Something but I'm not sure what it is
-    || !(superClassRef.name === "Component" || superClassRef.name === "PureComponent")
+    !(
+      superClassRef.name === "Component" ||
+      superClassRef.name === "PureComponent"
+    )
   ) {
     return;
   }
@@ -96,11 +116,17 @@ export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisRe
   // OK, now we are going to transform the component
   const name = path.node.id;
   const typeParameters_ = nonNullPath(path.get("typeParameters"));
-  const typeParameters = typeParameters_?.isTSTypeParameterDeclaration() ? typeParameters_ : undefined;
+  const typeParameters = typeParameters_?.isTSTypeParameterDeclaration()
+    ? typeParameters_
+    : undefined;
   const isPure = superClassRef.name === "PureComponent";
   let props: NodePath<TSType> | undefined;
-  let propsEach: Map<string, NodePath<TSPropertySignature | TSMethodSignature>> | undefined = undefined;
-  let states: Map<string, NodePath<TSPropertySignature | TSMethodSignature>> | undefined = undefined;
+  let propsEach:
+    | Map<string, NodePath<TSPropertySignature | TSMethodSignature>>
+    | undefined = undefined;
+  let states:
+    | Map<string, NodePath<TSPropertySignature | TSMethodSignature>>
+    | undefined = undefined;
   const superTypeParameters = path.get("superTypeParameters");
   if (superTypeParameters.isTSTypeParameterInstantiation()) {
     // Analyze P and S as in React.Component<P, S>
@@ -116,7 +142,15 @@ export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisRe
   }
   propsEach ??= new Map();
   states ??= new Map();
-  return { name, typeParameters, superClassRef, isPure, props, propsEach, states };
+  return {
+    name,
+    typeParameters,
+    superClassRef,
+    isPure,
+    props,
+    propsEach,
+    states,
+  };
 }
 
 /**
@@ -125,15 +159,19 @@ export function preanalyzeClass(path: NodePath<ClassDeclaration>): PreAnalysisRe
  * @param path a type
  * @returns a map containing property signatures and method signatures
  */
-function decompose(path: NodePath<TSType>): Map<string, NodePath<TSPropertySignature | TSMethodSignature>> {
+function decompose(
+  path: NodePath<TSType>
+): Map<string, NodePath<TSPropertySignature | TSMethodSignature>> {
   const aliasPath = resolveAlias(path);
-  const members =
-    aliasPath.isTSTypeLiteral()
+  const members = aliasPath.isTSTypeLiteral()
     ? aliasPath.get("members")
     : aliasPath.isTSInterfaceBody()
     ? aliasPath.get("body")
     : undefined;
-  const decomposed = new Map<string, NodePath<TSPropertySignature | TSMethodSignature>>();
+  const decomposed = new Map<
+    string,
+    NodePath<TSPropertySignature | TSMethodSignature>
+  >();
   if (members) {
     for (const member of members) {
       if (member.isTSPropertySignature() || member.isTSMethodSignature()) {
@@ -153,7 +191,9 @@ function decompose(path: NodePath<TSType>): Map<string, NodePath<TSPropertySigna
  * @param path a type to resolve
  * @returns A type node or a node containing an `interface` definition
  */
-function resolveAlias(path: NodePath<TSType>): NodePath<TSType | TSInterfaceBody> {
+function resolveAlias(
+  path: NodePath<TSType>
+): NodePath<TSType | TSInterfaceBody> {
   if (path.isTSTypeReference()) {
     const typeNamePath = path.get("typeName");
     if (typeNamePath.isIdentifier()) {
@@ -167,7 +207,10 @@ function resolveAlias(path: NodePath<TSType>): NodePath<TSType | TSInterfaceBody
           for (const body of path_.get("body")) {
             if (body.isTSTypeAliasDeclaration() && body.node.id.name === name) {
               return body.get("typeAnnotation");
-            } else if (body.isTSInterfaceDeclaration() && body.node.id.name === name) {
+            } else if (
+              body.isTSInterfaceDeclaration() &&
+              body.node.id.name === name
+            ) {
               return body.get("body");
             }
           }

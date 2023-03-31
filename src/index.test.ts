@@ -3,9 +3,12 @@ import { transform as transformCore } from "@codemod/core";
 import { dedent } from "@qnighy/dedent";
 import plugin from "./index.js";
 
-function transform(code: string, options: {
-  ts?: boolean | undefined
-} = {}) {
+function transform(
+  code: string,
+  options: {
+    ts?: boolean | undefined;
+  } = {}
+) {
   const { ts } = options;
   const result = transformCore(code, {
     configFile: false,
@@ -710,7 +713,7 @@ describe("react-declassify", () => {
       expect(transform(input, { ts: true })).toBe(output);
     });
 
-    it ("memoizes methods if necessary", () => {
+    it("memoizes methods if necessary", () => {
       const input = dedent`\
         class C extends React.Component {
           render() {

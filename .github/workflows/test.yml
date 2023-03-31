@@ -25,5 +25,5 @@ jobs:
       run: yarn tsc
     # - name: Lint
     #   run: yarn lint --max-warnings 0
-    # - name: Check formatting
-    #   run: yarn fmt:check
+    - name: Check formatting
+      run: yarn fmt:check

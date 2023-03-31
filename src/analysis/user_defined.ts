@@ -1,5 +1,12 @@
 import type { NodePath } from "@babel/core";
-import { ArrowFunctionExpression, ClassMethod, ClassPrivateMethod, Expression, FunctionExpression, TSType } from "@babel/types";
+import {
+  ArrowFunctionExpression,
+  ClassMethod,
+  ClassPrivateMethod,
+  Expression,
+  FunctionExpression,
+  TSType,
+} from "@babel/types";
 import { getOr, isClassMethodLike, nonNullPath } from "../utils.js";
 import { AnalysisError } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
@@ -42,10 +49,7 @@ export type UserDefinedAnalysis = {
   fields: Map<string, UserDefined>;
 };
 
-export type UserDefined =
-  | UserDefinedRef
-  | UserDefinedDirectRef
-  | UserDefinedFn;
+export type UserDefined = UserDefinedRef | UserDefinedDirectRef | UserDefinedFn;
 
 export type UserDefinedRef = {
   type: "user_defined_ref";
@@ -70,13 +74,15 @@ export type UserDefinedFn = {
   dependencies: CallbackDependency[];
 };
 
-export type FnInit = {
-  type: "method";
-  path: NodePath<ClassMethod | ClassPrivateMethod>;
-} | {
-  type: "func_def";
-  initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
-};
+export type FnInit =
+  | {
+      type: "method";
+      path: NodePath<ClassMethod | ClassPrivateMethod>;
+    }
+  | {
+      type: "func_def";
+      initPath: NodePath<FunctionExpression | ArrowFunctionExpression>;
+    };
 
 export type CallbackDependency =
   | CallbackDependencyPropsObj
@@ -109,7 +115,7 @@ export function analyzeUserDefined(
   instanceFields: Map<string, ClassFieldAnalysis>
 ): UserDefinedAnalysis {
   const fields = new Map<string, UserDefined>();
-  for (const [name, field]  of instanceFields) {
+  for (const [name, field] of instanceFields) {
     if (SPECIAL_MEMBER_NAMES.has(name)) {
       throw new AnalysisError(`Cannot transform ${name}`);
     }
@@ -129,7 +135,10 @@ export function analyzeUserDefined(
         };
       } else if (init.type === "init_value") {
         const initPath = init.valuePath;
-        if (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression()) {
+        if (
+          initPath.isFunctionExpression() ||
+          initPath.isArrowFunctionExpression()
+        ) {
           fnInit = {
             type: "func_def",
             initPath,
@@ -166,9 +175,11 @@ export function analyzeUserDefined(
         if (typing.valueTypePath.isTSTypeReference()) {
           const lastName =
             typing.valueTypePath.node.typeName.type === "Identifier"
-            ? typing.valueTypePath.node.typeName.name
-            : typing.valueTypePath.node.typeName.right.name;
-          const typeParameters = nonNullPath(typing.valueTypePath.get("typeParameters"));
+              ? typing.valueTypePath.node.typeName.name
+              : typing.valueTypePath.node.typeName.right.name;
+          const typeParameters = nonNullPath(
+            typing.valueTypePath.get("typeParameters")
+          );
           if (lastName === "RefObject" && typeParameters) {
             const params = typeParameters.get("params");
             if (params.length > 0) {
@@ -220,7 +231,7 @@ export function analyzeUserDefined(
   // It's actually a stack but either is fine
   const queue: string[] = [];
   // First loop: analyze preDependencies and memo requirement
-  for (const [name, field]  of instanceFields) {
+  for (const [name, field] of instanceFields) {
     const ud = fields.get(name)!;
     if (ud.type !== "user_defined_function") {
       continue;
@@ -291,7 +302,7 @@ export function postAnalyzeCallbackDependencies(
   userDefined: UserDefinedAnalysis,
   props: PropsObjAnalysis,
   states: StateObjAnalysis,
-  instanceFields: Map<string, ClassFieldAnalysis>,
+  instanceFields: Map<string, ClassFieldAnalysis>
 ) {
   for (const [name, prop] of props.props) {
     for (const alias of prop.aliases) {
@@ -366,7 +377,7 @@ export function postAnalyzeCallbackDependencies(
       });
     }
   }
-  for (const [name, field]  of instanceFields) {
+  for (const [name, field] of instanceFields) {
     const ud = userDefined.fields.get(name)!;
     if (ud.type !== "user_defined_function") {
       continue;

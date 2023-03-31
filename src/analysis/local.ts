@@ -1,6 +1,12 @@
 import type { Scope } from "@babel/traverse";
 import type { NodePath } from "@babel/core";
-import type { ClassDeclaration, ObjectProperty, RestElement, VariableDeclaration, VariableDeclarator } from "@babel/types";
+import type {
+  ClassDeclaration,
+  ObjectProperty,
+  RestElement,
+  VariableDeclaration,
+  VariableDeclarator,
+} from "@babel/types";
 
 // const RE_IDENT = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200C\u200D]*$/u;
 const RESERVED: ReadonlySet<string> = new Set<string>([
@@ -57,7 +63,11 @@ const RESERVED: ReadonlySet<string> = new Set<string>([
   "await",
 ]);
 
-export type RemovableNode = ObjectProperty | RestElement | VariableDeclarator | VariableDeclaration;
+export type RemovableNode =
+  | ObjectProperty
+  | RestElement
+  | VariableDeclarator
+  | VariableDeclaration;
 
 export class LocalManager {
   classPath: NodePath<ClassDeclaration>;
@@ -77,7 +87,7 @@ export class LocalManager {
     }
     if (this.hasName(name, bindingScopes)) {
       name = name.replace(/\d+$/, "");
-      for (let i = 0;; i++) {
+      for (let i = 0; ; i++) {
         if (i >= 1000000) {
           throw new Error("Unexpected infinite loop");
         }
@@ -92,7 +102,8 @@ export class LocalManager {
   }
 
   private hasName(name: string, scopes: Scope[]): boolean {
-    return this.assigned.has(name) ||
+    return (
+      this.assigned.has(name) ||
       scopes.some((scope) => {
         const binding = scope.getBinding(name);
         if (!binding) {
@@ -102,7 +113,8 @@ export class LocalManager {
           return false;
         }
         return true;
-      });
+      })
+    );
   }
 
   private collectScope(paths: NodePath[]): Scope[] {
@@ -151,7 +163,9 @@ export class LocalManager {
   }
 }
 
-function canonicalRemoveTarget(path: NodePath): NodePath<RemovableNode> | undefined {
+function canonicalRemoveTarget(
+  path: NodePath
+): NodePath<RemovableNode> | undefined {
   if (path.isIdentifier() || path.isObjectPattern()) {
     if (path.parentPath.isObjectProperty({ value: path.node })) {
       return path.parentPath;
