@@ -13,6 +13,19 @@ This codemod automatically transforms **React class components** into **React fu
 - ✅ Designed to generate as idiomatic code as possible. Not something Babel or Webpack would generate!
 - ✅ Based on classical heuristic automation; no need to be fearful about whimsy LLMs.
 
+## Why do we need this?
+
+Class components are [still going to be supported by React for the foreseeable future](https://react.dev/reference/react/Component). However, it is no longer recommended to write new components in class-style.
+
+So what about the existing components? Although React will continue to support these, you may struggle to maintain them because:
+
+- New libraries and new versions of existing libraries tend to focus on Hooks-style components, and you may find you in a difficulty adopting the components to the libraries.
+- Class components may appear alien to those who are young in React development experience.
+
+Thus it is still a good idea to migrate from class components to Hooks-based components.
+
+However, as this is not a simple syntactic change, migration needs a careful hand work and a careful review. This tool is a classic automation, it reduces a risk of introducing human errors during migration.
+
 ## Usage
 
 ```
