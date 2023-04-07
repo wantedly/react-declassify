@@ -1,5 +1,7 @@
 # react-declassify: say goodbye to class components
 
+<img src="./img/logo.png" height="150">
+
 This codemod automatically transforms **React class components** into **React functional components using Hooks** for you!
 
 | Before                                         | After                                        |
