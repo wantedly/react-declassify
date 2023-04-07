@@ -11,6 +11,7 @@ import type {
   ClassPrivateMethod,
   ClassPrivateProperty,
   ClassProperty,
+  Expression,
   FunctionDeclaration,
   FunctionExpression,
   Identifier,
@@ -102,6 +103,34 @@ export function importName(name: Identifier | StringLiteral): string {
   } else {
     return name.name;
   }
+}
+
+export function memberFromDecl(
+  babel: typeof import("@babel/core"),
+  object: Expression,
+  decl:
+    | ClassMethod
+    | ClassPrivateMethod
+    | ClassProperty
+    | ClassPrivateProperty
+    | ClassAccessorProperty
+    | TSDeclareMethod
+    | ObjectMethod
+    | ObjectProperty
+    | TSPropertySignature
+    | TSMethodSignature
+): MemberExpression {
+  const { types: t } = babel;
+  if (
+    decl.type === "ClassPrivateMethod" ||
+    decl.type === "ClassPrivateProperty"
+  ) {
+    return t.memberExpression(object, t.stringLiteral(decl.key.id.name), true);
+  }
+  if (decl.key.type === "PrivateName") {
+    return t.memberExpression(object, t.stringLiteral(decl.key.id.name), true);
+  }
+  return t.memberExpression(object, decl.key, decl.computed);
 }
 
 export function nonNullPath<T>(

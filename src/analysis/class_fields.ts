@@ -32,7 +32,7 @@ import {
   memberRefName,
   nonNullPath,
 } from "../utils.js";
-import { AnalysisError } from "./error.js";
+import { AnalysisError, SoftErrorRepository } from "./error.js";
 
 /**
  * Aggregated result of class field analysis.
@@ -103,6 +103,7 @@ export type ClassFieldExprSite = {
    * The node that accesses the field (both read and write)
    */
   path: NodePath<MemberExpression>;
+  thisPath: NodePath<ThisExpression>;
   owner: string | undefined;
   typing: undefined;
   init: undefined;
@@ -168,7 +169,8 @@ export type BindThisSite = {
  * - Static fields ... `C.foo`, where `C` is the class
  */
 export function analyzeClassFields(
-  path: NodePath<ClassDeclaration>
+  path: NodePath<ClassDeclaration>,
+  softErrors: SoftErrorRepository
 ): ClassFieldsAnalysis {
   const instanceFields = new Map<string, ClassFieldAnalysis>();
   const getInstanceField = (name: string) =>
@@ -188,7 +190,12 @@ export function analyzeClassFields(
       const isStatic = itemPath.node.static;
       const name = memberName(itemPath.node);
       if (name == null) {
-        throw new AnalysisError(`Unnamed class element`);
+        if (isStatic) {
+          throw new AnalysisError(`Unnamed class element`);
+        } else {
+          softErrors.addDeclError(itemPath);
+          continue;
+        }
       }
       const field = isStatic ? getStaticField(name) : getInstanceField(name);
       if (isClassPropertyLike(itemPath)) {
@@ -405,12 +412,14 @@ export function analyzeClassFields(
           });
           return;
         }
-        throw new AnalysisError(`Stray this`);
+        softErrors.addThisError(thisPath);
+        return;
       }
 
       const name = memberRefName(thisMemberPath.node);
       if (name == null) {
-        throw new AnalysisError(`Unrecognized this-property reference`);
+        softErrors.addThisError(thisPath);
+        return;
       }
 
       const field = getInstanceField(name)!;
@@ -431,6 +440,7 @@ export function analyzeClassFields(
         type: "expr",
         owner,
         path: thisMemberPath,
+        thisPath,
         typing: undefined,
         init: undefined,
         hasWrite,
@@ -519,6 +529,25 @@ export function analyzeClassFields(
   }
 
   return { instanceFields, staticFields, bindThisSites };
+}
+
+export function addClassFieldError(
+  site: ClassFieldSite,
+  softErrors: SoftErrorRepository
+) {
+  if (site.type === "decl") {
+    if (isNamedClassElement(site.path)) {
+      softErrors.addDeclError(site.path);
+    } else if (site.path.isAssignmentExpression()) {
+      const left = site.path.get("left") as NodePath<MemberExpression>;
+      const object = left.get("object") as NodePath<ThisExpression>;
+      softErrors.addThisError(object);
+    } else {
+      throw new Error(`Unreachable: invalid type: ${site.path.node.type}`);
+    }
+  } else {
+    softErrors.addThisError(site.thisPath);
+  }
 }
 
 function traverseThis(

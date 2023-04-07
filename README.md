@@ -161,6 +161,16 @@ export const C = props => {
 };
 ```
 
+## Errors
+
+Hard errors are indicated by `/* react-declassify-disable Cannot perform transformation */`.
+
+Soft errors are indicated by special variable names including:
+
+- `TODO_this`
+
+Hard errors stop transformation of the whole class while stop errors do not. You need to fix the errors to conclude transformation.
+
 ## Configuration
 
 ### Disabling transformation

@@ -133,19 +133,50 @@ describe("react-declassify", () => {
     expect(transform(input)).toBe(output);
   });
 
-  it("adds error message when analysis failed", () => {
-    const input = dedent`\
-      class C extends React.Component {
-        rende() {}
-      }
-    `;
-    const output = dedent`\
-      /* react-declassify-disable Cannot perform transformation: Missing render method */
-      class C extends React.Component {
-        rende() {}
-      }
-    `;
-    expect(transform(input)).toBe(output);
+  describe("Error handling", () => {
+    it("adds error message when analysis failed", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          rende() {}
+        }
+      `;
+      const output = dedent`\
+        /* react-declassify-disable Cannot perform transformation: Missing render method */
+        class C extends React.Component {
+          rende() {}
+        }
+      `;
+      expect(transform(input)).toBe(output);
+    });
+
+    it("produces soft errors", () => {
+      const input = dedent`\
+        class C extends React.Component {
+          static defaultProps = {
+            foo: 42,
+          };
+          render() {
+            console.log(this.state);
+            console.log(this.props);
+          }
+
+          componentWillReceiveProps() {
+            console.log("foo");
+          }
+        }
+      `;
+      const output = dedent`\
+        const C = () => {
+          TODO_this.componentWillReceiveProps = function() {
+            console.log("foo");
+          };
+
+          console.log(TODO_this.state);
+          console.log(TODO_this.props);
+        };
+      `;
+      expect(transform(input)).toBe(output);
+    });
   });
 
   describe("Component detection", () => {

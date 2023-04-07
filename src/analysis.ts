@@ -8,7 +8,7 @@ import type {
   TSType,
   TSTypeParameterDeclaration,
 } from "@babel/types";
-import { AnalysisError } from "./analysis/error.js";
+import { AnalysisError, SoftErrorRepository } from "./analysis/error.js";
 import { BindThisSite, analyzeClassFields } from "./analysis/class_fields.js";
 import { analyzeState, StateObjAnalysis } from "./analysis/state.js";
 import { getAndDelete } from "./utils.js";
@@ -23,7 +23,7 @@ import type { PreAnalysisResult } from "./analysis/pre.js";
 import type { LibRef } from "./analysis/lib.js";
 import { EffectAnalysis, analyzeEffects } from "./analysis/effect.js";
 
-export { AnalysisError } from "./analysis/error.js";
+export { AnalysisError, SoftErrorRepository } from "./analysis/error.js";
 
 export type { LibRef } from "./analysis/lib.js";
 export type { PreAnalysisResult } from "./analysis/pre.js";
@@ -63,14 +63,15 @@ export type AnalysisResult = {
 
 export function analyzeClass(
   path: NodePath<ClassDeclaration>,
-  preanalysis: PreAnalysisResult
+  preanalysis: PreAnalysisResult,
+  softErrors: SoftErrorRepository
 ): AnalysisResult {
   const locals = new LocalManager(path);
   const {
     instanceFields: sites,
     staticFields,
     bindThisSites,
-  } = analyzeClassFields(path);
+  } = analyzeClassFields(path, softErrors);
 
   const propsObjAnalysis = getAndDelete(sites, "props") ?? { sites: [] };
   const defaultPropsObjAnalysis = getAndDelete(
@@ -84,6 +85,7 @@ export function analyzeClass(
     stateObjAnalysis,
     setStateAnalysis,
     locals,
+    softErrors,
     preanalysis
   );
 
@@ -102,8 +104,10 @@ export function analyzeClass(
   analyzeOuterCapturings(path, locals);
   let renderPath: NodePath<ClassMethod> | undefined = undefined;
   {
-    if (renderAnalysis.sites.some((site) => site.type === "expr")) {
-      throw new AnalysisError(`do not use this.render`);
+    for (const site of renderAnalysis.sites) {
+      if (site.type === "expr") {
+        softErrors.addThisError(site.thisPath);
+      }
     }
     const init = renderAnalysis.sites.find((site) => site.init);
     if (init) {
@@ -112,7 +116,7 @@ export function analyzeClass(
       }
     }
   }
-  const userDefined = analyzeUserDefined(sites);
+  const userDefined = analyzeUserDefined(sites, softErrors);
   for (const [name] of staticFields) {
     if (!SPECIAL_STATIC_NAMES.has(name)) {
       throw new AnalysisError(`Cannot transform static ${name}`);
@@ -127,6 +131,7 @@ export function analyzeClass(
     propsObjAnalysis,
     defaultPropsObjAnalysis,
     locals,
+    softErrors,
     preanalysis
   );
   postAnalyzeCallbackDependencies(userDefined, props, states, sites);

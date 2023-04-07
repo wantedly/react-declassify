@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Added
+  - Implemented soft errors.
+    - From this version onward, it will try to generate special variables like `TODO_this` to indicate errors and continue transformation.
+    - It allows you to automate more transformation while using manual rewriting when necessary.
+    - Not all errors are soft errors, but we will continue to make as many errors soft errors as possible.
+
 ## 0.1.10
 
 - Misc

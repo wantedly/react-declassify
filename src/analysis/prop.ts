@@ -7,9 +7,9 @@ import type {
   TSPropertySignature,
 } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
-import { AnalysisError } from "./error.js";
+import { AnalysisError, SoftErrorRepository } from "./error.js";
 import type { LocalManager } from "./local.js";
-import { ClassFieldAnalysis } from "./class_fields.js";
+import { ClassFieldAnalysis, addClassFieldError } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 import { PreAnalysisResult } from "./pre.js";
 
@@ -67,6 +67,7 @@ export function analyzeProps(
   propsObjAnalysis: ClassFieldAnalysis,
   defaultPropsObjAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
+  softErrors: SoftErrorRepository,
   preanalysis: PreAnalysisResult
 ): PropsObjAnalysis {
   const defaultProps = analyzeDefaultProps(defaultPropsObjAnalysis);
@@ -80,7 +81,8 @@ export function analyzeProps(
 
   for (const site of propsObjAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
-      throw new AnalysisError(`Invalid use of this.props`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
     const memberAnalysis = trackMember(site.path);
     const parentSite: PropsObjSite = {
@@ -89,8 +91,8 @@ export function analyzeProps(
       decomposedAsAliases: false,
       child: undefined,
     };
-    newObjSites.push(parentSite);
     if (memberAnalysis.fullyDecomposed && memberAnalysis.memberAliases) {
+      newObjSites.push(parentSite);
       for (const [name, aliasing] of memberAnalysis.memberAliases) {
         getProp(name).aliases.push({
           scope: aliasing.scope,
@@ -102,10 +104,10 @@ export function analyzeProps(
       parentSite.decomposedAsAliases = true;
     } else {
       if (defaultProps && !memberAnalysis.memberExpr) {
-        throw new AnalysisError(
-          `Non-analyzable this.props in presence of defaultProps`
-        );
+        addClassFieldError(site, softErrors);
+        continue;
       }
+      newObjSites.push(parentSite);
       if (memberAnalysis.memberExpr) {
         const child: PropSite = {
           path: memberAnalysis.memberExpr.path,
@@ -145,7 +147,7 @@ function analyzeDefaultProps(
 ): Map<string, NodePath<Expression>> | undefined {
   for (const site of defaultPropsAnalysis.sites) {
     if (!site.init) {
-      throw new AnalysisError(`Invalid use of static defaultState`);
+      throw new AnalysisError(`Invalid use of static defaultProps`);
     }
   }
 

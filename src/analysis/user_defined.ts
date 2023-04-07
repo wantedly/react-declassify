@@ -8,9 +8,13 @@ import {
   TSType,
 } from "@babel/types";
 import { getOr, isClassMethodLike, nonNullPath } from "../utils.js";
-import { AnalysisError } from "./error.js";
+import { AnalysisError, SoftErrorRepository } from "./error.js";
 import { analyzeLibRef, isReactRef } from "./lib.js";
-import type { ClassFieldAnalysis, ClassFieldSite } from "./class_fields.js";
+import {
+  ClassFieldAnalysis,
+  ClassFieldSite,
+  addClassFieldError,
+} from "./class_fields.js";
 import { PropsObjAnalysis } from "./prop.js";
 import { StateObjAnalysis } from "./state.js";
 
@@ -112,12 +116,16 @@ export type CallbackDependencyFn = {
 };
 
 export function analyzeUserDefined(
-  instanceFields: Map<string, ClassFieldAnalysis>
+  instanceFields: Map<string, ClassFieldAnalysis>,
+  softErrors: SoftErrorRepository
 ): UserDefinedAnalysis {
   const fields = new Map<string, UserDefined>();
   for (const [name, field] of instanceFields) {
     if (SPECIAL_MEMBER_NAMES.has(name)) {
-      throw new AnalysisError(`Cannot transform ${name}`);
+      for (const site of field.sites) {
+        addClassFieldError(site, softErrors);
+      }
+      continue;
     }
     let fnInit: FnInit | undefined = undefined;
     let isRefInit = false;
@@ -232,8 +240,8 @@ export function analyzeUserDefined(
   const queue: string[] = [];
   // First loop: analyze preDependencies and memo requirement
   for (const [name, field] of instanceFields) {
-    const ud = fields.get(name)!;
-    if (ud.type !== "user_defined_function") {
+    const ud = fields.get(name);
+    if (ud?.type !== "user_defined_function") {
       continue;
     }
     for (const site of field.sites) {
@@ -378,8 +386,8 @@ export function postAnalyzeCallbackDependencies(
     }
   }
   for (const [name, field] of instanceFields) {
-    const ud = userDefined.fields.get(name)!;
-    if (ud.type !== "user_defined_function") {
+    const ud = userDefined.fields.get(name);
+    if (ud?.type !== "user_defined_function") {
       continue;
     }
     for (const site of field.sites) {

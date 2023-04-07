@@ -27,7 +27,10 @@ import {
   assignTypeArguments,
   assignTypeParameters,
   importName,
+  isClassMethodLike,
+  isClassPropertyLike,
   isTS,
+  memberFromDecl,
   nonNullPath,
 } from "./utils.js";
 import {
@@ -39,6 +42,7 @@ import {
   LibRef,
   needAlias,
   SetStateFieldSite,
+  SoftErrorRepository,
 } from "./analysis.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -57,12 +61,14 @@ export default function plugin(
         if (!preanalysis) {
           return;
         }
+        const softErrors = new SoftErrorRepository();
         if (path.parentPath.isExportDefaultDeclaration()) {
           const declPath = path.parentPath;
           try {
-            const analysis = analyzeClass(path, preanalysis);
+            const analysis = analyzeClass(path, preanalysis, softErrors);
             const { funcNode, typeNode } = transformClass(
               analysis,
+              softErrors,
               { ts },
               babel
             );
@@ -94,9 +100,10 @@ export default function plugin(
           }
         } else {
           try {
-            const analysis = analyzeClass(path, preanalysis);
+            const analysis = analyzeClass(path, preanalysis, softErrors);
             const { funcNode, typeNode } = transformClass(
               analysis,
+              softErrors,
               { ts },
               babel
             );
@@ -134,6 +141,7 @@ type TransformResult = {
 
 function transformClass(
   analysis: AnalysisResult,
+  softErrors: SoftErrorRepository,
   options: { ts: boolean },
   babel: typeof import("@babel/core")
 ): TransformResult {
@@ -261,6 +269,15 @@ function transformClass(
       bindThisSite.binderPath.replaceWith(bindThisSite.bindeePath.node);
     }
   }
+
+  // Soft error handling
+  for (const softError of softErrors.errors) {
+    if (softError.type === "invalid_this") {
+      // this -> TODO_this
+      softError.path.replaceWith(t.identifier("TODO_this"));
+    }
+  }
+
   // Preamble is a set of statements to be added before the original render body.
   const preamble: Statement[] = [];
   const propsWithAlias = Array.from(analysis.props.props).filter(([, prop]) =>
@@ -615,6 +632,41 @@ function transformClass(
     }
   }
 
+  // Soft error handling
+  for (const softError of softErrors.errors) {
+    if (softError.type === "invalid_decl") {
+      if (isClassPropertyLike(softError.path) && softError.path.node.value) {
+        preamble.push(
+          t.expressionStatement(
+            t.assignmentExpression(
+              "=",
+              memberFromDecl(
+                babel,
+                t.identifier("TODO_this"),
+                softError.path.node
+              ),
+              softError.path.node.value
+            )
+          )
+        );
+      } else if (isClassMethodLike(softError.path)) {
+        preamble.push(
+          t.expressionStatement(
+            t.assignmentExpression(
+              "=",
+              memberFromDecl(
+                babel,
+                t.identifier("TODO_this"),
+                softError.path.node
+              ),
+              functionExpressionFrom(babel, softError.path.node)
+            )
+          )
+        );
+      }
+    }
+  }
+
   const bodyNode = analysis.render.path.node.body;
   bodyNode.body.splice(0, 0, ...preamble);
   // recast is not smart enough to correctly pretty-print type parameters for arrow functions.
@@ -649,7 +701,7 @@ function transformClass(
         ])
       )
     : undefined;
-  const funcNode = assignTypeParameters(
+  let funcNode: Expression = assignTypeParameters(
     assignReturnType(
       functionNeeded
         ? t.functionExpression(
@@ -662,13 +714,14 @@ function transformClass(
     ),
     analysis.typeParameters?.node
   );
+  if (analysis.isPure) {
+    funcNode = t.callExpression(
+      getReactImport("memo", babel, analysis.superClassRef),
+      [funcNode]
+    );
+  }
   return {
-    funcNode: analysis.isPure
-      ? t.callExpression(
-          getReactImport("memo", babel, analysis.superClassRef),
-          [funcNode]
-        )
-      : funcNode,
+    funcNode,
     typeNode:
       ts && !analysis.typeParameters
         ? t.tsTypeReference(

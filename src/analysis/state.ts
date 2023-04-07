@@ -8,10 +8,10 @@ import type {
   TSType,
 } from "@babel/types";
 import { getOr, memberName } from "../utils.js";
-import { AnalysisError } from "./error.js";
+import { AnalysisError, SoftErrorRepository } from "./error.js";
 import { PreAnalysisResult } from "./pre.js";
 import type { LocalManager } from "./local.js";
-import type { ClassFieldAnalysis } from "./class_fields.js";
+import { ClassFieldAnalysis, addClassFieldError } from "./class_fields.js";
 import { trackMember } from "./track_member.js";
 
 export type StateObjAnalysis = {
@@ -65,6 +65,7 @@ export function analyzeState(
   stateObjAnalysis: ClassFieldAnalysis,
   setStateAnalysis: ClassFieldAnalysis,
   locals: LocalManager,
+  softErrors: SoftErrorRepository,
   preanalysis: PreAnalysisResult
 ): StateObjAnalysis {
   const states = new Map<string, StateAnalysis>();
@@ -108,7 +109,8 @@ export function analyzeState(
       continue;
     }
     if (site.type !== "expr" || site.hasWrite) {
-      throw new AnalysisError(`Invalid use of this.state`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
     const memberAnalysis = trackMember(site.path);
     if (memberAnalysis.fullyDecomposed && memberAnalysis.memberAliases) {
@@ -133,21 +135,25 @@ export function analyzeState(
         owner: site.owner,
       });
     } else {
-      throw new AnalysisError(`Non-analyzable this.state`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
   }
   const setStateSites: SetStateSite[] = [];
-  for (const site of setStateAnalysis.sites) {
+  setStateLoop: for (const site of setStateAnalysis.sites) {
     if (site.type !== "expr" || site.hasWrite) {
-      throw new AnalysisError(`Invalid use of this.setState`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
     const gpPath = site.path.parentPath;
     if (!gpPath.isCallExpression()) {
-      throw new AnalysisError(`Stray this.setState`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
     const args = gpPath.get("arguments");
     if (args.length !== 1) {
-      throw new AnalysisError(`Non-analyzable setState`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
     const arg0 = args[0]!;
     if (arg0.isObjectExpression()) {
@@ -155,11 +161,13 @@ export function analyzeState(
       const fields: SetStateFieldSite[] = [];
       for (const prop of props) {
         if (!prop.isObjectProperty()) {
-          throw new AnalysisError(`Non-analyzable setState`);
+          addClassFieldError(site, softErrors);
+          continue setStateLoop;
         }
         const setStateName = memberName(prop.node);
         if (setStateName == null) {
-          throw new AnalysisError(`Non-analyzable setState name`);
+          addClassFieldError(site, softErrors);
+          continue setStateLoop;
         }
         // Ensure the state exists
         getState(setStateName);
@@ -173,7 +181,8 @@ export function analyzeState(
         fields,
       });
     } else {
-      throw new AnalysisError(`Non-analyzable setState`);
+      addClassFieldError(site, softErrors);
+      continue;
     }
   }
   for (const [name, stateType] of preanalysis.states) {
