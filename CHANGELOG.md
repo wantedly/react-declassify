@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 0.2.0
+
 - Added
   - Implemented soft errors.
     - From this version onward, it will try to generate special variables like `TODO_this` to indicate errors and continue transformation.
