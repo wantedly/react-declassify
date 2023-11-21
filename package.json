@@ -51,7 +51,7 @@
     "@codemod/core": "^2.2.0",
     "@jest/globals": "^29.5.0",
     "@qnighy/dedent": "^0.1.1",
-    "@types/babel__core": "^7.20.0",
+    "@types/babel__core": "^7.20.5",
     "@types/babel__traverse": "^7.18.3",
     "@types/node": "^18.15.11",
     "@typescript-eslint/eslint-plugin": "^5.57.0",
