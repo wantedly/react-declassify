@@ -228,7 +228,7 @@ Class components may receive refs; this is to be supported in the future. Once i
 
 ### Syntactic styles
 
-This codemod relies on [recast](https://github.com/benjamn/recast) for pretty-printing and sometimes generates code that does not match your preferred style. This is ineviable. For example it does not currently emit parentheses for the arrow function:
+This codemod relies on [recast](https://github.com/benjamn/recast) for pretty-printing and sometimes generates code that does not match your preferred style. This is inevitable. For example it does not currently emit parentheses for the arrow function:
 
 <!-- prettier-ignore -->
 ```js
