@@ -53,7 +53,7 @@
     "@qnighy/dedent": "^0.1.1",
     "@types/babel__core": "^7.20.0",
     "@types/babel__traverse": "^7.18.3",
-    "@types/node": "^18.15.11",
+    "@types/node": "^18.19.59",
     "@typescript-eslint/eslint-plugin": "^5.57.0",
     "@typescript-eslint/parser": "^5.57.0",
     "@yarnpkg/sdks": "^3.0.0-rc.42",
