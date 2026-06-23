@@ -1,0 +1,7 @@
+schema_version: "1.0.0"
+name: react-declassify-workflow
+version: 1.0.0
+description: "React Class to Hook Codemod with AI review"
+author: "istan"
+engine: workflow
+arguments: []

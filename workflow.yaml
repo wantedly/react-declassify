@@ -1,0 +1,40 @@
+version: "1"
+
+params:
+  autoAiReview:
+    name: "Auto AI Review"
+    description: "Whether to use AI to review the transformed React components (requires LLM_API_KEY environment variable)"
+    type: boolean
+    default: false
+
+nodes:
+  - id: apply-transforms
+    name: Apply AST Transformations
+    type: automatic
+    steps:
+      - name: "Transform React class components to function components"
+        run: "npx -y @codemod/cli@3.3.0 --plugin ../../../react-declassify/cjs/dist/index.js ${TARGET:-src/} || true"
+  - id: ai-review
+    name: "AI Review"
+    type: automatic
+    if: "params.autoAiReview == true"
+    depends_on:
+      - apply-transforms
+    steps:
+      - name: "AI Code Review"
+        glob: "src/**/*.js"
+        ai:
+          max_tokens: 8000
+          prompt: |
+            You are an expert React migration codemod agent.
+            Your job is to fix the remaining issues in the React codebase after an automatic class-to-function component transform.
+            Please search for all .js files in the src/ directory (especially src/components/ and src/reducers/ and src/control/) that contain the string `TODO_this` or `react-declassify-disable`.
+            For each file you find, you must edit it to fix the issues:
+            1. If `TODO_this.shouldComponentUpdate` is used, remove it completely and rewrite the component export to use `React.memo(ComponentName, (prevProps, nextProps) => { ... })`. Make sure to convert any `props` variables and maintain identical behavior. WARNING: `shouldComponentUpdate` returns `true` to update. `React.memo` returns `true` to SKIP update. Invert the boolean logic!
+            2. For component refs (like dom_rotate, dom_down, etc.), if they are accessed dynamically via `TODO_this[\`dom_${key}\`].dom`, replace that access with `eval(\`dom_${key}\`).current` or create a local object mapping keys to refs and use that. Make sure `TODO_this` is completely removed.
+            3. Fix any eslint errors you might create:
+               - Ensure spaces before function parentheses (e.g., `function () {}` not `function(){}`).
+               - Ensure there are no missing trailing commas.
+               - If there are camelcase errors for variables like `dom_rotate`, either fix them to `domRotate` (and update all usages including string interpolation like `` \`dom_${key}\` ``) or add `/* eslint-disable camelcase */` at the top of the file to ignore them.
+            
+            Edit the files directly using your available tools. Do not stop until all instances of `TODO_this` are removed from the src/ directory.
